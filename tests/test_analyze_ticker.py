@@ -51,4 +51,3 @@ def test_analyze_ticker_no_daily(monkeypatch):
     res = analyze_ticker('BAR')
     assert res['ticker'] == 'BAR'
     assert 'error' in res and 'no daily data' in res['error']
-
