@@ -2,6 +2,97 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import re
+
+# Parse stocks.txt file to extract individual tickers and baskets
+def parse_stocks_file(filepath):
+    """
+    Parse stocks.txt file and return:
+    - individual_tickers: list of individual ticker symbols
+    - baskets: dict mapping basket name to list of constituent tickers
+    """
+    individual_tickers = []
+    baskets = {}
+
+    with open(filepath, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            # Skip empty lines and comments
+            if not line or line.startswith('#'):
+                continue
+            # Check for basket definition: [Basket Name] ticker1, ticker2, ticker3
+            basket_match = re.match(r'\[([^\]]+)\]\s*(.+)', line)
+            if basket_match:
+                basket_name = basket_match.group(1).strip()
+                ticker_list = [t.strip().upper() for t in basket_match.group(2).split(',')]
+                baskets[basket_name] = ticker_list
+            else:
+                # Individual ticker
+                ticker = line.upper()
+                if ticker:
+                    individual_tickers.append(ticker)
+
+    return individual_tickers, baskets
+
+
+def analyze_basket(basket_name, constituent_tickers):
+    """
+    Analyze a basket of stocks by calculating equal-weighted averages.
+    Returns a dict with aggregated metrics similar to analyze_ticker format.
+    """
+    basket_name = f"[{basket_name}]"  # Mark as basket in output
+    try:
+        # Analyze each constituent
+        constituent_results = []
+        for ticker in constituent_tickers:
+            result = analyze_ticker(ticker)
+            if 'error' not in result:
+                constituent_results.append(result)
+
+        if not constituent_results:
+            return {"ticker": basket_name, "error": "no valid constituent data"}
+
+        # Calculate equal-weighted averages
+        current_price = np.mean([r['current_price'] for r in constituent_results])
+
+        # Average the numeric fields
+        numeric_fields = ['d20', 'd50', 'd100', 'd200', 'w10', 'w20', 'w200',
+                         'daily_poc', 'daily_vah', 'daily_val',
+                         'weekly_poc', 'weekly_vah', 'weekly_val',
+                         's1', 's2', 's3', 'r1', 'r2', 'r3']
+
+        aggregated = {}
+        for field in numeric_fields:
+            values = [r[field] for r in constituent_results if r.get(field) is not None]
+            if values:
+                aggregated[field] = float(np.mean(values))
+            else:
+                aggregated[field] = None
+
+        # Determine overall signal (majority vote)
+        signals = [r['signal'] for r in constituent_results]
+        signal_counts = {}
+        for sig in signals:
+            signal_counts[sig] = signal_counts.get(sig, 0) + 1
+        dominant_signal = max(signal_counts.items(), key=lambda x: x[1])[0]
+
+        # Build result
+        today = datetime.now().strftime("%Y-%m-%d")
+        result = {
+            'ticker': basket_name,
+            'signal': dominant_signal,
+            'current_price': current_price,
+            'price_note': 'equal-weighted avg',
+            'date': today,
+            'notes': f"Constituents: {', '.join(constituent_tickers)}"
+        }
+        result.update(aggregated)
+
+        return result
+
+    except Exception as e:
+        return {'ticker': basket_name, 'error': str(e)}
+
 
 # SMMA function (for Larsson)
 def smma(series, length):
