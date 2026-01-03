@@ -8,4 +8,3 @@ voila
 flask
 pytest
 jupyterlab
-
