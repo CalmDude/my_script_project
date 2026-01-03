@@ -17,7 +17,7 @@ $currentBranch = (git rev-parse --abbrev-ref HEAD).Trim()
 Write-Host "Current branch: $currentBranch"
 
 # Check if add-tests branch exists locally
-$branchExists = git show-ref --verify --quiet refs/heads/add-tests 2>$null
+git show-ref --verify --quiet refs/heads/add-tests 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Fetching add-tests branch from PR #4..."
     git fetch origin +refs/pull/4/head:add-tests
