@@ -1,3 +1,10 @@
 yfinance
 pandas
 numpy
+plotly
+ipywidgets
+streamlit
+voila
+flask
+pytest
+jupyterlab
