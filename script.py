@@ -37,25 +37,42 @@ def parse_stocks_file(filepath):
 
 def analyze_basket(basket_name, constituent_tickers):
     """
-    Analyze a basket of stocks by calculating equal-weighted averages.
+    Analyze a basket of stocks by calculating market cap-weighted averages.
     Returns a dict with aggregated metrics similar to analyze_ticker format.
     """
     basket_name = f"[{basket_name}]"  # Mark as basket in output
     try:
-        # Analyze each constituent
-        constituent_results = []
+        # Analyze each constituent and get market caps
+        constituent_data = []
         for ticker in constituent_tickers:
             result = analyze_ticker(ticker)
             if 'error' not in result:
-                constituent_results.append(result)
+                # Fetch market cap
+                try:
+                    stock = yf.Ticker(ticker)
+                    info = stock.info
+                    market_cap = info.get('marketCap', 0)
+                    if market_cap and market_cap > 0:
+                        constituent_data.append({
+                            'result': result,
+                            'market_cap': market_cap
+                        })
+                except:
+                    # If can't get market cap, skip this constituent
+                    pass
 
-        if not constituent_results:
-            return {"ticker": basket_name, "error": "no valid constituent data"}
+        if not constituent_data:
+            return {"ticker": basket_name, "error": "no valid constituent data with market caps"}
 
-        # Calculate equal-weighted averages
-        current_price = np.mean([r['current_price'] for r in constituent_results])
+        # Calculate market cap weights
+        total_market_cap = sum(d['market_cap'] for d in constituent_data)
+        for d in constituent_data:
+            d['weight'] = d['market_cap'] / total_market_cap
 
-        # Average the numeric fields
+        # Calculate weighted average price
+        current_price = sum(d['result']['current_price'] * d['weight'] for d in constituent_data)
+
+        # Calculate weighted averages for numeric fields
         numeric_fields = ['d20', 'd50', 'd100', 'd200', 'w10', 'w20', 'w200',
                          'daily_poc', 'daily_vah', 'daily_val',
                          'weekly_poc', 'weekly_vah', 'weekly_val',
@@ -63,18 +80,24 @@ def analyze_basket(basket_name, constituent_tickers):
 
         aggregated = {}
         for field in numeric_fields:
-            values = [r[field] for r in constituent_results if r.get(field) is not None]
-            if values:
-                aggregated[field] = float(np.mean(values))
+            weighted_sum = 0
+            total_weight = 0
+            for d in constituent_data:
+                value = d['result'].get(field)
+                if value is not None:
+                    weighted_sum += value * d['weight']
+                    total_weight += d['weight']
+            if total_weight > 0:
+                aggregated[field] = float(weighted_sum / total_weight)
             else:
                 aggregated[field] = None
 
-        # Determine overall signal (majority vote)
-        signals = [r['signal'] for r in constituent_results]
-        signal_counts = {}
-        for sig in signals:
-            signal_counts[sig] = signal_counts.get(sig, 0) + 1
-        dominant_signal = max(signal_counts.items(), key=lambda x: x[1])[0]
+        # Determine overall signal (weighted by market cap)
+        signal_weights = {}
+        for d in constituent_data:
+            sig = d['result']['signal']
+            signal_weights[sig] = signal_weights.get(sig, 0) + d['weight']
+        dominant_signal = max(signal_weights.items(), key=lambda x: x[1])[0]
 
         # Build result
         today = datetime.now().strftime("%Y-%m-%d")
@@ -82,7 +105,7 @@ def analyze_basket(basket_name, constituent_tickers):
             'ticker': basket_name,
             'signal': dominant_signal,
             'current_price': current_price,
-            'price_note': 'equal-weighted avg',
+            'price_note': 'market cap weighted',
             'date': today,
             'notes': f"Constituents: {', '.join(constituent_tickers)}"
         }
