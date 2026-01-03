@@ -1,3 +1,9 @@
 {
-    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe"
+    "python.defaultInterpreterPath": "C:/workspace/my_script_project/.venv/Scripts/python.exe",
+    "black-formatter.interpreter": [
+        "C:/workspace/my_script_project/.venv/Scripts/python.exe"
+    ],
+    "ruff.interpreter": [
+        "C:/workspace/my_script_project/.venv/Scripts/python.exe"
+    ]
 }

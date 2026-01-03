@@ -78,57 +78,131 @@ def select_top_sr(swing_highs, swing_lows, current_price, max_levels=3):
     supports = sorted(supports, reverse=True)  # S1 closest (highest)
     return supports, resistances
 
-# Main
-ticker = input("Enter ticker (e.g., PLTR): ").upper()
-stock = yf.Ticker(ticker)
+def analyze_ticker(ticker):
+    """Fetch data and compute indicators for a single ticker. Returns a dict with results."""
+    ticker = ticker.upper()
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        current_price = info.get('regularMarketPrice') or info.get('preMarketPrice') or info.get('previousClose')
+        price_note = "pre-market" if 'preMarketPrice' in info else "last close"
+        today = datetime.now().strftime("%Y-%m-%d")
 
-# Current price
-info = stock.info
-current_price = info.get('regularMarketPrice') or info.get('preMarketPrice') or info['previousClose']
-price_note = "pre-market" if 'preMarketPrice' in info else "last close"
-today = datetime.now().strftime("%Y-%m-%d")
+        # Daily data (3y for SMAs/VP/pivots)
+        daily = stock.history(period="3y")
+        if daily.empty:
+            return {"ticker": ticker, "error": "no daily data"}
+        d20 = daily['Close'].rolling(20).mean().iloc[-1]
+        d50 = daily['Close'].rolling(50).mean().iloc[-1]
+        d100 = daily['Close'].rolling(100).mean().iloc[-1]
+        d200 = daily['Close'].rolling(200).mean().iloc[-1]
 
-# Daily data (3y for SMAs/VP/pivots)
-daily = stock.history(period="3y")
-d20 = daily['Close'].rolling(20).mean().iloc[-1]
-d50 = daily['Close'].rolling(50).mean().iloc[-1]
-d100 = daily['Close'].rolling(100).mean().iloc[-1]
-d200 = daily['Close'].rolling(200).mean().iloc[-1]
+        # Weekly data
+        weekly = stock.history(period="10y", interval="1wk")
+        if weekly.empty:
+            return {"ticker": ticker, "error": "no weekly data"}
+        w10 = weekly['Close'].rolling(10).mean().iloc[-1]
+        w20 = weekly['Close'].rolling(20).mean().iloc[-1]
+        w200 = weekly['Close'].rolling(200).mean().iloc[-1]
 
-# Weekly data
-weekly = stock.history(period="10y", interval="1wk")
-w10 = weekly['Close'].rolling(10).mean().iloc[-1]
-w20 = weekly['Close'].rolling(20).mean().iloc[-1]
-w200 = weekly['Close'].rolling(200).mean().iloc[-1]
+        # VPVR
+        daily_vp_df = daily.iloc[-60:]
+        daily_poc, daily_vah, daily_val = calculate_volume_profile(daily_vp_df)
+        weekly_vp_df = weekly.iloc[-52:]
+        weekly_poc, weekly_vah, weekly_val = calculate_volume_profile(weekly_vp_df)
 
-# VPVR
-daily_vp_df = daily.iloc[-60:]
-daily_poc, daily_vah, daily_val = calculate_volume_profile(daily_vp_df)
-weekly_vp_df = weekly.iloc[-52:]
-weekly_poc, weekly_vah, weekly_val = calculate_volume_profile(weekly_vp_df)
+        # Pivots
+        daily_highs, daily_lows = detect_swings(daily)
+        daily_supports, daily_resistances = select_top_sr(daily_highs, daily_lows, current_price)
+        weekly_highs, weekly_lows = detect_swings(weekly)
+        weekly_supports, weekly_resistances = select_top_sr(weekly_highs, weekly_lows, current_price)
 
-# Pivots
-daily_highs, daily_lows = detect_swings(daily)
-daily_supports, daily_resistances = select_top_sr(daily_highs, daily_lows, current_price)
-weekly_highs, weekly_lows = detect_swings(weekly)
-weekly_supports, weekly_resistances = select_top_sr(weekly_highs, weekly_lows, current_price)
+        # Signal
+        daily_state = get_larsson_state(daily)
+        weekly_state = get_larsson_state(weekly)
+        mapping = {
+            (1,1): "FULL HOLD + ADD", (1,0): "HOLD", (1,-1): "HOLD MOST → REDUCE",
+            (0,1): "SCALE IN", (0,0): "LIGHT / CASH", (0,-1): "CASH",
+            (-1,1): "REDUCE", (-1,0): "CASH", (-1,-1): "FULL CASH / DEFEND"
+        }
+        signal = mapping.get((weekly_state, daily_state), "UNKNOWN")
 
-# Signal
-daily_state = get_larsson_state(daily)
-weekly_state = get_larsson_state(weekly)
-mapping = {
-    (1,1): "FULL HOLD + ADD", (1,0): "HOLD", (1,-1): "HOLD MOST → REDUCE",
-    (0,1): "SCALE IN", (0,0): "LIGHT / CASH", (0,-1): "CASH",
-    (-1,1): "REDUCE", (-1,0): "CASH", (-1,-1): "FULL CASH / DEFEND"
-}
-signal = mapping.get((weekly_state, daily_state), "UNKNOWN")
+        result = {
+            'ticker': ticker,
+            'signal': signal,
+            'current_price': current_price,
+            'price_note': price_note,
+            'date': today,
+            'd20': float(d20) if not pd.isna(d20) else None,
+            'd50': float(d50) if not pd.isna(d50) else None,
+            'd100': float(d100) if not pd.isna(d100) else None,
+            'd200': float(d200) if not pd.isna(d200) else None,
+            'w10': float(w10) if not pd.isna(w10) else None,
+            'w20': float(w20) if not pd.isna(w20) else None,
+            'w200': float(w200) if not pd.isna(w200) else None,
+            'daily_poc': float(daily_poc), 'daily_vah': float(daily_vah), 'daily_val': float(daily_val),
+            'weekly_poc': float(weekly_poc), 'weekly_vah': float(weekly_vah), 'weekly_val': float(weekly_val),
+            's1': float(daily_supports[0]) if not pd.isna(daily_supports[0]) else None,
+            's2': float(daily_supports[1]) if not pd.isna(daily_supports[1]) else None,
+            's3': float(daily_supports[2]) if not pd.isna(daily_supports[2]) else None,
+            'r1': float(daily_resistances[0]) if not pd.isna(daily_resistances[0]) else None,
+            'r2': float(daily_resistances[1]) if not pd.isna(daily_resistances[1]) else None,
+            'r3': float(daily_resistances[2]) if not pd.isna(daily_resistances[2]) else None,
+            'notes': ''
+        }
+        return result
+    except Exception as e:
+        return {'ticker': ticker, 'error': str(e)}
 
-# Output
-print(f"Decision Table Signal: {signal}")
-print(f"Current Price: ~${current_price:.2f} ({price_note} as of {today})")
-print(f"Daily SMA: D20: {d20:.2f}, D50: {d50:.2f}, D100: {d100:.2f}, D200: {d200:.2f}")
-print(f"Weekly SMA: W10: {w10:.2f}, W20: {w20:.2f}, W200: {w200:.2f}")
-print(f"Daily VPVR: POC: {daily_poc:.2f}, VAH: {daily_vah:.2f}, VAL: {daily_val:.2f}")
-print(f"Weekly VPVR: POC: {weekly_poc:.2f}, VAH: {weekly_vah:.2f}, VAL: {weekly_val:.2f}")
-print(f"Daily Pivot S/R: Support 1: {daily_supports[0]:.2f}, Support 2: {daily_supports[1]:.2f}, Support 3: {daily_supports[2]:.2f} | Resistance 1: {daily_resistances[0]:.2f}, Resistance 2: {daily_resistances[1]:.2f}, Resistance 3: {daily_resistances[2]:.2f}")
-print(f"Weekly Pivot S/R: Support 1: {weekly_supports[0]:.2f}, Support 2: {weekly_supports[1]:.2f}, Support 3: {weekly_supports[2]:.2f} | Resistance 1: {weekly_resistances[0]:.2f}, Resistance 2: {weekly_resistances[1]:.2f}, Resistance 3: {weekly_resistances[2]:.2f}")
+
+if __name__ == '__main__':
+    import argparse
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    parser = argparse.ArgumentParser(description='Analyze tickers and save results to CSV')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--tickers', nargs='+', help='Space-separated list of tickers to analyze')
+    group.add_argument('--file', help='Path to file with one ticker per line')
+    parser.add_argument('--output', '-o', default='results.csv', help='Output CSV file path')
+    parser.add_argument('--concurrency', '-c', type=int, default=4, help='Number of concurrent workers')
+    parser.add_argument('--save-per-symbol', action='store_true', help='Save individual CSVs per ticker in ./results')
+    args = parser.parse_args()
+
+    # Build ticker list
+    tickers = []
+    if args.tickers:
+        tickers = [t.upper() for t in args.tickers]
+    else:
+        with open(args.file, 'r', encoding='utf-8') as f:
+            tickers = [line.strip().upper() for line in f if line.strip()]
+
+    results = []
+    with ThreadPoolExecutor(max_workers=args.concurrency) as ex:
+        futures = {ex.submit(analyze_ticker, t): t for t in tickers}
+        for fut in as_completed(futures):
+            res = fut.result()
+            results.append(res)
+            t = res.get('ticker')
+            if 'error' in res:
+                print(f"{t}: ERROR: {res['error']}")
+            else:
+                print(f"{t}: {res['signal']} @ {res['current_price']}")
+                if args.save_per_symbol:
+                    import os
+                    os.makedirs('results', exist_ok=True)
+                    import csv
+                    path = os.path.join('results', f"{t}.csv")
+                    with open(path, 'w', newline='', encoding='utf-8') as csvfile:
+                        writer = csv.DictWriter(csvfile, fieldnames=list(res.keys()))
+                        writer.writeheader()
+                        writer.writerow(res)
+
+    # Save combined CSV
+    import csv
+    keys = set().union(*(r.keys() for r in results))
+    keys = sorted(keys)
+    with open(args.output, 'w', newline='', encoding='utf-8') as out:
+        writer = csv.DictWriter(out, fieldnames=keys)
+        writer.writeheader()
+        for r in results:
+            writer.writerow(r)
+    print(f"Wrote {len(results)} rows to {args.output}")
