@@ -41,23 +41,23 @@ def confluence_decision_tree(row):
     price = row['current_price']
     if price is None or pd.isna(price):
         return "UNKNOWN"
-    
+
     # Required fields — return UNKNOWN if any missing
     required_fields = ['daily_val', 'daily_vah', 'daily_poc', 'd50', 'w10']
     if any(row.get(field) is None or pd.isna(row.get(field)) for field in required_fields):
         return "UNKNOWN"
-    
+
     daily_val = row['daily_val']
     daily_vah = row['daily_vah']
     daily_poc = row['daily_poc']
     d50 = row['d50']
     w10 = row['w10']
-    
+
     inside_va = daily_val <= price <= daily_vah
     at_above_poc = price >= daily_poc
     above_d50 = price > d50
     above_w10 = price > w10
-    
+
     if inside_va and at_above_poc and above_d50 and above_w10:
         return "Bullish / Favor Add"
     elif inside_va and not at_above_poc and (not above_d50 or not above_w10):
@@ -69,17 +69,17 @@ def confluence_decision_tree(row):
 def conservative_recommendation(row):
     signal = row['signal']
     confluence = row.get('confluence', 'UNKNOWN')
-    
+
     if "FULL HOLD + ADD" not in signal:
         return "No Buy"
-    
+
     if confluence == "Bullish / Favor Add":
         return "No Starter – Wait for Primary Dip"
     elif confluence == "Neutral / Acceptable":
         return "Immediate Starter Possible on Minor Dip"
     else:
         return "No Buy – Wait for Better Confluence"
-    
+
 def analyze_basket(basket_name, constituent_tickers, daily_bars=60, weekly_bars=52):
     """
     Analyze a basket of stocks by calculating market cap-weighted averages.
