@@ -59,13 +59,35 @@ def confluence_decision_tree(row):
     above_w10 = price > w10
 
     if inside_va and at_above_poc and above_d50 and above_w10:
-        return "Bullish / Favor Add"
+        return "EXTENDED"
     elif inside_va and not at_above_poc and (not above_d50 or not above_w10):
-        return "Neutral / Acceptable"
+        return "BALANCED"
     else:
-        return "Caution / Skip"  # or Bearish/Pause
+        return "WEAK"  # or Bearish/Pause
 
-# Conservative recommendation (global - no starters in Bullish)
+# Signal descriptions for portfolio guidance
+def get_signal_description(signal):
+    """Return detailed guidance for each Larsson signal based on weekly/daily state combination."""
+    descriptions = {
+        "FULL HOLD + ADD": "Strongest bullish alignment – macro and short-term trends fully confirmed. Hold full position and gradually add on dips for compounding. Prioritize capital preservation: adds only in confirmed strength.",
+
+        "HOLD": "Macro bull intact, short-term pause or inconclusive. Hold full position patiently – no need to act. Avoid new adds or reductions; wait for daily resolution back to strength.",
+
+        "HOLD MOST → REDUCE": "Macro bull with short-term correction. Hold majority position but make gradual reductions into strength if pullback deepens. Lighten to preserve profits – scale out on rallies.",
+
+        "SCALE IN": "Potential emerging bull – short-term strength without macro confirmation yet. Scale in gradually on dips, building position in small increments. Stay disciplined: only add if daily remains strong; keep significant cash reserve.",
+
+        "LIGHT / CASH": "Inconclusive – no clear trend on either timeframe. Remain mostly in cash or very light position. Wait patiently for alignment; tiny probes only on extreme conviction signals.",
+
+        "CASH": "Uncertain or weak conditions. Stay mostly or fully in cash – no new buys. Make reductions to any remaining exposure if weakness persists. Wait for clearer signal before re-engaging.",
+
+        "REDUCE": "Macro bear risk despite short-term bounce. Make gradual reductions into strength/rallies. De-risk toward majority cash – do not add. Bounces are opportunities to exit.",
+
+        "FULL CASH / DEFEND": "Strongest bearish alignment – macro and short-term trends fully down. Full cash position; aggressively protect capital. Exit any remaining longs through disciplined reductions."
+    }
+    return descriptions.get(signal, "No guidance available for this signal.")
+
+# Conservative recommendation (global - no starters in Extended zones)
 def conservative_recommendation(row):
     signal = row['signal']
     confluence = row.get('confluence', 'UNKNOWN')
@@ -73,12 +95,12 @@ def conservative_recommendation(row):
     if "FULL HOLD + ADD" not in signal:
         return "No Buy"
 
-    if confluence == "Bullish / Favor Add":
-        return "No Starter – Wait for Primary Dip"
-    elif confluence == "Neutral / Acceptable":
-        return "Immediate Starter Possible on Minor Dip"
+    if confluence == "EXTENDED":
+        return "Wait for Support"
+    elif confluence == "BALANCED":
+        return "Enter on Dip"
     else:
-        return "No Buy – Wait for Better Confluence"
+        return "Skip – Poor Setup"
 
 def analyze_basket(basket_name, constituent_tickers, daily_bars=60, weekly_bars=52):
     """
