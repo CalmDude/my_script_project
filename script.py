@@ -35,7 +35,7 @@ def parse_stocks_file(filepath):
     return individual_tickers, baskets
 
 
-def analyze_basket(basket_name, constituent_tickers):
+def analyze_basket(basket_name, constituent_tickers, daily_bars=60, weekly_bars=52):
     """
     Analyze a basket of stocks by calculating market cap-weighted averages.
     Returns a dict with aggregated metrics similar to analyze_ticker format.
@@ -44,8 +44,9 @@ def analyze_basket(basket_name, constituent_tickers):
     try:
         # Analyze each constituent and get market caps
         constituent_data = []
+        constituent_signals = []  # To list signals in notes
         for ticker in constituent_tickers:
-            result = analyze_ticker(ticker)
+            result = analyze_ticker(ticker, daily_bars, weekly_bars)
             if 'error' not in result:
                 # Fetch market cap
                 try:
@@ -57,6 +58,7 @@ def analyze_basket(basket_name, constituent_tickers):
                             'result': result,
                             'market_cap': market_cap
                         })
+                        constituent_signals.append(f"{ticker} {result['signal']}")
                 except:
                     # If can't get market cap, skip this constituent
                     pass
@@ -64,52 +66,57 @@ def analyze_basket(basket_name, constituent_tickers):
         if not constituent_data:
             return {"ticker": basket_name, "error": "no valid constituent data with market caps"}
 
-        # Calculate market cap weights
-        total_market_cap = sum(d['market_cap'] for d in constituent_data)
-        for d in constituent_data:
-            d['weight'] = d['market_cap'] / total_market_cap
-
-        # Calculate weighted average price
-        current_price = sum(d['result']['current_price'] * d['weight'] for d in constituent_data)
-
         # Calculate weighted averages for numeric fields
-        numeric_fields = ['d20', 'd50', 'd100', 'd200', 'w10', 'w20', 'w200',
-                         'daily_poc', 'daily_vah', 'daily_val',
-                         'weekly_poc', 'weekly_vah', 'weekly_val',
-                         's1', 's2', 's3', 'r1', 'r2', 'r3']
-
-        aggregated = {}
+        numeric_fields = ['d20', 'd50', 'd100', 'd200', 'w10', 'w20', 'w200']
+        basket_result = {'ticker': basket_name}
+        basket_result['notes'] = f"Constituents: {', '.join(constituent_signals)}"
+        market_caps = [cd['market_cap'] for cd in constituent_data]
+        total_market_cap = sum(market_caps)
+        weights = [mc / total_market_cap for mc in market_caps]
         for field in numeric_fields:
-            weighted_sum = 0
-            total_weight = 0
-            for d in constituent_data:
-                value = d['result'].get(field)
-                if value is not None:
-                    weighted_sum += value * d['weight']
-                    total_weight += d['weight']
-            if total_weight > 0:
-                aggregated[field] = float(weighted_sum / total_weight)
+            # Filter both values and weights together to maintain correspondence
+            paired_data = [(cd['result'][field], cd['market_cap'] / total_market_cap)
+                          for cd in constituent_data if cd['result'][field] is not None]
+            if paired_data:
+                field_values = [v for v, w in paired_data]
+                field_weights = [w for v, w in paired_data]
+                # Renormalize weights to sum to 1.0 after filtering
+                weight_sum = sum(field_weights)
+                if weight_sum > 0:
+                    field_weights = [w / weight_sum for w in field_weights]
+                    basket_result[field] = np.average(field_values, weights=field_weights)
+                else:
+                    basket_result[field] = None
             else:
-                aggregated[field] = None
+                basket_result[field] = None
 
-        # Determine overall signal (weighted by market cap)
-        signal_weights = {}
-        for d in constituent_data:
-            sig = d['result']['signal']
-            signal_weights[sig] = signal_weights.get(sig, 0) + d['weight']
-        dominant_signal = max(signal_weights.items(), key=lambda x: x[1])[0]
+        # Basket price as market-cap weighted average
+        price_data = [(cd['result']['current_price'], cd['market_cap'] / total_market_cap)
+                     for cd in constituent_data if cd['result']['current_price'] is not None]
+        if price_data:
+            price_values = [v for v, w in price_data]
+            price_weights = [w for v, w in price_data]
+            # Renormalize weights to sum to 1.0 after filtering
+            weight_sum = sum(price_weights)
+            if weight_sum > 0:
+                price_weights = [w / weight_sum for w in price_weights]
+                basket_result['current_price'] = np.average(price_values, weights=price_weights)
+            else:
+                basket_result['current_price'] = None
+            basket_result['price_note'] = "market cap weighted"
+            basket_result['date'] = datetime.now().strftime("%Y-%m-%d")
+        else:
+            basket_result['current_price'] = None
 
-        # Build result
-        today = datetime.now().strftime("%Y-%m-%d")
-        result = {
-            'ticker': basket_name,
-            'signal': dominant_signal,
-            'current_price': current_price,
-            'price_note': 'market cap weighted',
-            'date': today,
-            'notes': f"Constituents: {', '.join(constituent_tickers)}"
-        }
-        result.update(aggregated)
+        # Basket signal as dominant signal (most common or weighted by market cap)
+        signals = [cd['result']['signal'] for cd in constituent_data]
+        basket_result['signal'] = max(set(signals), key=signals.count)  # Most common signal
+
+        # Set VPVR and pivots to None for baskets
+        for field in ['daily_poc', 'daily_vah', 'daily_val', 'weekly_poc', 'weekly_vah', 'weekly_val', 's1', 's2', 's3', 'r1', 'r2', 'r3']:
+            basket_result[field] = None
+
+        result = basket_result
 
         return result
 
@@ -192,7 +199,7 @@ def select_top_sr(swing_highs, swing_lows, current_price, max_levels=3):
     supports = sorted(supports, reverse=True)  # S1 closest (highest)
     return supports, resistances
 
-def analyze_ticker(ticker):
+def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
     """Fetch data and compute indicators for a single ticker. Returns a dict with results."""
     ticker = ticker.upper()
     try:
@@ -202,7 +209,7 @@ def analyze_ticker(ticker):
         price_note = "pre-market" if 'preMarketPrice' in info else "last close"
         today = datetime.now().strftime("%Y-%m-%d")
 
-        # Daily data (3y for SMAs/VP/pivots)
+        # Daily data
         daily = stock.history(period="3y")
         if daily.empty:
             return {"ticker": ticker, "error": "no daily data"}
@@ -220,9 +227,9 @@ def analyze_ticker(ticker):
         w200 = weekly['Close'].rolling(200).mean().iloc[-1]
 
         # VPVR
-        daily_vp_df = daily.iloc[-60:]
+        daily_vp_df = daily.iloc[-daily_bars:]
         daily_poc, daily_vah, daily_val = calculate_volume_profile(daily_vp_df)
-        weekly_vp_df = weekly.iloc[-52:]
+        weekly_vp_df = weekly.iloc[-weekly_bars:]
         weekly_poc, weekly_vah, weekly_val = calculate_volume_profile(weekly_vp_df)
 
         # Pivots
@@ -291,7 +298,7 @@ if __name__ == '__main__':
 
     results = []
     with ThreadPoolExecutor(max_workers=args.concurrency) as ex:
-        futures = {ex.submit(analyze_ticker, t): t for t in tickers}
+        futures = {ex.submit(analyze_ticker, t, 60, 52): t for t in tickers}
         for fut in as_completed(futures):
             res = fut.result()
             results.append(res)
