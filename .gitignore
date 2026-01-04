@@ -6,6 +6,7 @@ __pycache__/
 # Generated output files
 batch_results.csv
 batch_results_*.csv
+buy_summary_*.pdf
 results/*.csv
 
 # Logs and temporary files
