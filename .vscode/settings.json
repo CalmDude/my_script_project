@@ -5,5 +5,9 @@
     ],
     "ruff.interpreter": [
         "C:/workspace/my_script_project/.venv/Scripts/python.exe"
-    ]
+    ],
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportArgumentType": "none"
+    }
 }

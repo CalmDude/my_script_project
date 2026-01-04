@@ -35,6 +35,51 @@ def parse_stocks_file(filepath):
     return individual_tickers, baskets
 
 
+def confluence_score(result):
+    """Calculate confluence score based on price position"""
+    price = result.get('current_price')
+    if price is None or pd.isna(price):
+        return "UNKNOWN"
+
+    # Check if all required values exist and are not None/NaN
+    daily_val = result.get('daily_val')
+    daily_vah = result.get('daily_vah')
+    daily_poc = result.get('daily_poc')
+    d50 = result.get('d50')
+    w10 = result.get('w10')
+
+    # Return UNKNOWN if any critical value is missing or NaN
+    if any(v is None or (isinstance(v, float) and pd.isna(v)) for v in [daily_val, daily_vah, daily_poc, d50, w10]):
+        return "UNKNOWN"
+
+    inside_va = daily_val <= price <= daily_vah
+    at_above_poc = price >= daily_poc
+    above_d50 = price > d50
+    above_w10 = price > w10
+
+    if inside_va and at_above_poc and above_d50 and above_w10:
+        return "Bullish / Favor Add"
+    elif inside_va:
+        return "Neutral / Acceptable"
+    else:
+        return "Caution / Skip"
+
+
+def recommendation(result):
+    """Generate recommendation based on signal and confluence"""
+    signal = result.get('signal', '')
+    confluence = result.get('confluence', 'UNKNOWN')
+
+    if "FULL HOLD + ADD" not in signal:
+        return "No Buy"
+    if confluence == "Bullish / Favor Add":
+        return "No Starter – Wait for Primary Dip"
+    elif confluence == "Neutral / Acceptable":
+        return "Immediate Starter Possible on Minor Dip"
+    else:
+        return "No Buy – Wait for Better Confluence"
+
+
 def analyze_basket(basket_name, constituent_tickers, daily_bars=60, weekly_bars=52):
     """
     Analyze a basket of stocks by calculating market cap-weighted averages.
@@ -118,6 +163,10 @@ def analyze_basket(basket_name, constituent_tickers, daily_bars=60, weekly_bars=
 
         result = basket_result
 
+        # Add confluence and recommendation
+        result['confluence'] = confluence_score(result)
+        result['recommendation'] = recommendation(result)
+
         return result
 
     except Exception as e:
@@ -126,12 +175,12 @@ def analyze_basket(basket_name, constituent_tickers, daily_bars=60, weekly_bars=
 
 # SMMA function (for Larsson)
 def smma(series, length):
-    smma = pd.Series(np.nan, index=series.index)
+    smma_result = pd.Series(np.nan, index=series.index)
     sma_val = series.rolling(length).mean()
-    smma.iloc[length-1] = sma_val.iloc[length-1]
+    smma_result.iloc[length-1] = sma_val.iloc[length-1]
     for i in range(length, len(series)):
-        smma.iloc[i] = (smma.iloc[i-1] * (length - 1) + series.iloc[i]) / length
-    return smma
+        smma_result.iloc[i] = (smma_result.iloc[i-1] * (length - 1) + series.iloc[i]) / length
+    return smma_result
 
 # Larsson state
 def get_larsson_state(df, fast=15, slow=19, v1len=25, v2len=29):
@@ -271,6 +320,11 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             'r3': float(daily_resistances[2]) if not pd.isna(daily_resistances[2]) else None,
             'notes': ''
         }
+
+        # Add confluence and recommendation
+        result['confluence'] = confluence_score(result)
+        result['recommendation'] = recommendation(result)
+
         return result
     except Exception as e:
         return {'ticker': ticker, 'error': str(e)}
