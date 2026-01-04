@@ -35,51 +35,51 @@ def parse_stocks_file(filepath):
     return individual_tickers, baskets
 
 
-def confluence_score(result):
-    """Calculate confluence score based on price position"""
-    price = result.get('current_price')
+# Confluence Decision Tree (exact classification - mandatory)
+def confluence_decision_tree(row):
+    """Exact confluence classification using the mandatory Decision Tree from Larsson Master Summary."""
+    price = row['current_price']
     if price is None or pd.isna(price):
         return "UNKNOWN"
-
-    # Check if all required values exist and are not None/NaN
-    daily_val = result.get('daily_val')
-    daily_vah = result.get('daily_vah')
-    daily_poc = result.get('daily_poc')
-    d50 = result.get('d50')
-    w10 = result.get('w10')
-
-    # Return UNKNOWN if any critical value is missing or NaN
-    if any(v is None or (isinstance(v, float) and pd.isna(v)) for v in [daily_val, daily_vah, daily_poc, d50, w10]):
+    
+    # Required fields — return UNKNOWN if any missing
+    required_fields = ['daily_val', 'daily_vah', 'daily_poc', 'd50', 'w10']
+    if any(row.get(field) is None or pd.isna(row.get(field)) for field in required_fields):
         return "UNKNOWN"
-
+    
+    daily_val = row['daily_val']
+    daily_vah = row['daily_vah']
+    daily_poc = row['daily_poc']
+    d50 = row['d50']
+    w10 = row['w10']
+    
     inside_va = daily_val <= price <= daily_vah
     at_above_poc = price >= daily_poc
     above_d50 = price > d50
     above_w10 = price > w10
-
+    
     if inside_va and at_above_poc and above_d50 and above_w10:
         return "Bullish / Favor Add"
-    elif inside_va:
+    elif inside_va and not at_above_poc and (not above_d50 or not above_w10):
         return "Neutral / Acceptable"
     else:
-        return "Caution / Skip"
+        return "Caution / Skip"  # or Bearish/Pause
 
-
-def recommendation(result):
-    """Generate recommendation based on signal and confluence"""
-    signal = result.get('signal', '')
-    confluence = result.get('confluence', 'UNKNOWN')
-
+# Conservative recommendation (global - no starters in Bullish)
+def conservative_recommendation(row):
+    signal = row['signal']
+    confluence = row.get('confluence', 'UNKNOWN')
+    
     if "FULL HOLD + ADD" not in signal:
         return "No Buy"
+    
     if confluence == "Bullish / Favor Add":
         return "No Starter – Wait for Primary Dip"
     elif confluence == "Neutral / Acceptable":
         return "Immediate Starter Possible on Minor Dip"
     else:
         return "No Buy – Wait for Better Confluence"
-
-
+    
 def analyze_basket(basket_name, constituent_tickers, daily_bars=60, weekly_bars=52):
     """
     Analyze a basket of stocks by calculating market cap-weighted averages.
@@ -164,8 +164,8 @@ def analyze_basket(basket_name, constituent_tickers, daily_bars=60, weekly_bars=
         result = basket_result
 
         # Add confluence and recommendation
-        result['confluence'] = confluence_score(result)
-        result['recommendation'] = recommendation(result)
+        result['confluence'] = confluence_decision_tree(result)
+        result['recommendation'] = conservative_recommendation(result)
 
         return result
 
@@ -321,9 +321,9 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             'notes': ''
         }
 
-        # Add confluence and recommendation
-        result['confluence'] = confluence_score(result)
-        result['recommendation'] = recommendation(result)
+        # Replace your existing confluence/recommendation with the conservative versions
+        result['confluence'] = confluence_decision_tree(result)
+        result['recommendation'] = conservative_recommendation(result)
 
         return result
     except Exception as e:
