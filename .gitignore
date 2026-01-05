@@ -3,10 +3,11 @@ __pycache__/
 *.pyc
 .env
 
-# Generated output files
+# Generated output files (should only exist in Downloads, not workspace)
 batch_results.csv
 batch_results_*.csv
 buy_summary_*.pdf
+sell_summary_*.pdf
 results/*.csv
 
 # Logs and temporary files
