@@ -8,3 +8,7 @@ voila
 flask
 pytest
 jupyterlab
+openpyxl
+reportlab
+lxml
+html5lib
