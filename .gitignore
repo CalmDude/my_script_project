@@ -10,6 +10,10 @@ buy_summary_*.pdf
 sell_summary_*.pdf
 results/*.csv
 
+# Scanner results (Excel files with historical data)
+scanner_results/
+scanner_results/**/*.xlsx
+
 # Logs and temporary files
 ci_logs/
 ci_logs.zip
