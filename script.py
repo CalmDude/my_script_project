@@ -107,28 +107,28 @@ def get_reduction_tranches(signal, reduction_pct, reduction_amount):
 
     # Single tranche for smaller reductions (20-40%)
     if reduction_pct <= 0.40:
-        return [(reduction_amount, 1.0, "at resistance or current price")]
+        return [(reduction_amount, 1.0, "At resistance or current price")]
 
     # Two tranches for medium reductions (60%)
     elif reduction_pct <= 0.60:
         return [
-            (reduction_amount * 0.67, 0.40, "immediate - at R1 or current"),
-            (reduction_amount * 0.33, 0.20, "on bounce - at R2+")
+            (reduction_amount * 0.67, 0.40, "Immediate - at R1 or current"),
+            (reduction_amount * 0.33, 0.20, "On bounce - at R2+")
         ]
 
     # Two tranches for heavy reductions (80%)
     elif reduction_pct <= 0.80:
         return [
-            (reduction_amount * 0.625, 0.50, "immediate - at R1 or current"),
-            (reduction_amount * 0.375, 0.30, "on bounce - at R2+")
+            (reduction_amount * 0.625, 0.50, "Immediate - at R1 or current"),
+            (reduction_amount * 0.375, 0.30, "On bounce - at R2+")
         ]
 
     # Full exit (100%) - three tranches for best price realization
     else:  # FULL CASH / DEFEND
         return [
-            (reduction_amount * 0.60, 0.60, "immediate - at R1 or current"),
-            (reduction_amount * 0.30, 0.30, "on bounce - at R2"),
-            (reduction_amount * 0.10, 0.10, "final - at R3 or any rally")
+            (reduction_amount * 0.60, 0.60, "Immediate - at R1 or current"),
+            (reduction_amount * 0.30, 0.30, "On bounce - at R2"),
+            (reduction_amount * 0.10, 0.10, "Final - at R3 or any rally")
         ]
 
 # Conservative recommendation
