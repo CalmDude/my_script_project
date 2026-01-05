@@ -118,9 +118,9 @@ def filter_buy_signals(df, signal='FULL HOLD + ADD'):
         return df
     return df[df['signal'] == signal].sort_values('ticker')
 
-def cleanup_old_scans(results_dir, max_files=7):
+def cleanup_old_scans(results_dir, max_files=1):
     """
-    Keep only the 7 most recent scan files (both Excel and PDF), move older ones to archive
+    Keep only the most recent scan files (both Excel and PDF), move older ones to archive
     """
     archive_dir = results_dir / 'archive'
     archive_dir.mkdir(exist_ok=True)
@@ -129,16 +129,25 @@ def cleanup_old_scans(results_dir, max_files=7):
     xlsx_files = sorted(results_dir.glob('sp500_analysis_*.xlsx'), key=lambda p: p.stat().st_mtime, reverse=True)
     pdf_files = sorted(results_dir.glob('scanner_report_*.pdf'), key=lambda p: p.stat().st_mtime, reverse=True)
 
+    total_archived = 0
+
     # Move files beyond max_files to archive
     for old_file in xlsx_files[max_files:]:
         archive_path = archive_dir / old_file.name
         old_file.rename(archive_path)
-        print(f"  Archived: {old_file.name}")
+        print(f"  📦 Archived: {old_file.name}")
+        total_archived += 1
 
     for old_file in pdf_files[max_files:]:
         archive_path = archive_dir / old_file.name
         old_file.rename(archive_path)
-        print(f"  Archived: {old_file.name}")
+        print(f"  📦 Archived: {old_file.name}")
+        total_archived += 1
+
+    if total_archived > 0:
+        print(f"  ✅ Archived {total_archived} file(s), kept {max_files} most recent")
+    else:
+        print(f"  ✅ No files to archive (only {max_files} most recent exist)")
 
 def create_excel_output(buy_df, output_file):
     """
