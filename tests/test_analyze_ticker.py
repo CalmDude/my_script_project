@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-from script import analyze_ticker
+from technical_analysis import analyze_ticker
 
 
 class DummyTicker:

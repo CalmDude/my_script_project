@@ -1,5 +1,5 @@
 import numpy as np
-from script import analyze_ticker, analyze_basket
+from technical_analysis import analyze_ticker, analyze_basket
 import traceback
 
 # Test the Lower Risk AI Basket
