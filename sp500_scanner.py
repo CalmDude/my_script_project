@@ -118,10 +118,14 @@ def filter_buy_signals(df, signal='FULL HOLD + ADD'):
         return df
     return df[df['signal'] == signal].sort_values('ticker')
 
-def cleanup_old_scans(results_dir, max_files=1):
+def cleanup_old_scans(results_dir, max_files=1, archive_retention_days=60):
     """
     Keep only the most recent scan files (both Excel and PDF), move older ones to archive
+    Delete archive files older than archive_retention_days (default: 60 days)
     """
+    from datetime import datetime, timedelta
+    import time
+
     archive_dir = results_dir / 'archive'
     archive_dir.mkdir(exist_ok=True)
 
@@ -148,6 +152,21 @@ def cleanup_old_scans(results_dir, max_files=1):
         print(f"  ✅ Archived {total_archived} file(s), kept {max_files} most recent")
     else:
         print(f"  ✅ No files to archive (only {max_files} most recent exist)")
+
+    # Delete archive files older than retention period
+    cutoff_time = time.time() - (archive_retention_days * 86400)  # 86400 seconds per day
+    deleted_count = 0
+
+    for archive_file in archive_dir.glob('*'):
+        if archive_file.is_file() and archive_file.stat().st_mtime < cutoff_time:
+            try:
+                archive_file.unlink()
+                deleted_count += 1
+            except Exception as e:
+                print(f"  ⚠️  Could not delete {archive_file.name}: {e}")
+
+    if deleted_count > 0:
+        print(f"  🗑️  Deleted {deleted_count} archive file(s) older than {archive_retention_days} days")
 
 def create_excel_output(buy_df, output_file):
     """
@@ -336,30 +355,46 @@ def create_pdf_report(buy_df, all_results_df, output_file, timestamp_str):
         daily_val = row.get('daily_val', 0)
         daily_vah = row.get('daily_vah', 0)
 
+        # Check actual conditions
+        in_value_area = (daily_val <= price <= daily_vah) if not pd.isna(daily_val) and not pd.isna(daily_vah) else False
+        near_poc = (price >= daily_poc * 0.95) if not pd.isna(daily_poc) else False
+        above_d50 = (price >= d50) if not pd.isna(d50) else False
+        above_w10 = (price >= w10) if not pd.isna(w10) else False
+
+        check_mark = lambda cond: "✓" if cond else "✗"
+
         why_balanced = f"""
         <b>Why BALANCED? (Confluence Check)</b><br/>
-        ✓ Inside Value Area: ${daily_val:.0f} ≤ ${price:.2f} ≤ ${daily_vah:.0f}<br/>
-        ✓ Near POC Support: ${price:.2f} ≥ ${daily_poc:.0f}<br/>
-        ✓ Above D50: ${price:.2f} vs ${d50:.0f}<br/>
-        ✓ Above W10: ${price:.2f} vs ${w10:.0f}<br/>
+        {check_mark(in_value_area)} Inside Value Area: ${daily_val:.0f} ≤ ${price:.2f} ≤ ${daily_vah:.0f}<br/>
+        {check_mark(near_poc)} Near POC Support: ${price:.2f} ≥ ${daily_poc:.0f}<br/>
+        {check_mark(above_d50)} Above D50: ${price:.2f} vs ${d50:.0f}<br/>
+        {check_mark(above_w10)} Above W10: ${price:.2f} vs ${w10:.0f}<br/>
         <br/>
         <b>Status:</b> Healthy setup, not overbought, safe entry zone
         """
         elements.append(Paragraph(why_balanced, styles['Normal']))
         elements.append(Spacer(1, 0.15*inch))
 
-        # Entry strategy
+        # Entry strategy - Use actual support levels in descending order
         entry_title = Paragraph("<b>Entry Strategy (3 Zones)</b>", section_style)
         elements.append(entry_title)
 
-        zone1_price = price * 0.99
-        zone2_price = daily_val if not pd.isna(daily_val) else d50 * 0.97
-        zone3_price = w10 * 0.98 if not pd.isna(w10) else d200 * 1.02
+        # Zone 1: Near current price (1% below)
+        zone1_high = price
+        zone1_low = price * 0.99
+
+        # Zone 2: Lower Value Area or near D50
+        zone2_high = zone1_low
+        zone2_low = min(daily_val if not pd.isna(daily_val) else d50, d50) if not pd.isna(d50) else price * 0.95
+
+        # Zone 3: D200 area (strongest support)
+        zone3_high = zone2_low
+        zone3_low = d200 * 1.02 if not pd.isna(d200) else price * 0.90
 
         entry_text = f"""
-        <b>Zone 1 (Aggressive):</b> ${zone1_price:.2f}-${price:.2f} (current area, near support)<br/>
-        <b>Zone 2 (Patient):</b> ${zone2_price:.2f}-${zone1_price:.2f} (pullback to stronger support)<br/>
-        <b>Zone 3 (Deep Value):</b> ${zone3_price:.2f}-${zone2_price:.2f} (near major support)<br/>
+        <b>Zone 1 (Aggressive):</b> ${zone1_low:.2f}-${zone1_high:.2f} (current area, near support)<br/>
+        <b>Zone 2 (Patient):</b> ${zone2_low:.2f}-${zone2_high:.2f} (pullback to stronger support)<br/>
+        <b>Zone 3 (Deep Value):</b> ${zone3_low:.2f}-${zone3_high:.2f} (near major support)<br/>
         <br/>
         <b>Recommendation:</b> Scale in across zones, don't chase. Build position gradually.
         """
@@ -377,16 +412,20 @@ def create_pdf_report(buy_df, all_results_df, output_file, timestamp_str):
         elements.append(Paragraph(risk_text, styles['Normal']))
         elements.append(Spacer(1, 0.15*inch))
 
-        # Upside targets
+        # Upside targets - Get resistances and sort them correctly (closest first)
         r1 = row.get('r1', price * 1.05)
         r2 = row.get('r2', price * 1.10)
         r3 = row.get('r3', price * 1.15)
 
+        # Sort resistances in ascending order (R1 should be closest/lowest)
+        resistances = sorted([r1, r2, r3])
+        r1_sorted, r2_sorted, r3_sorted = resistances[0], resistances[1], resistances[2]
+
         elements.append(Paragraph("<b>Upside Targets (Resistance Map)</b>", section_style))
         targets_text = f"""
-        <b>R1:</b> ${r1:.2f} ({(r1/price-1)*100:.1f}% gain) - First profit target<br/>
-        <b>R2:</b> ${r2:.2f} ({(r2/price-1)*100:.1f}% gain) - Major resistance<br/>
-        <b>R3:</b> ${r3:.2f} ({(r3/price-1)*100:.1f}% gain) - Full rally target<br/>
+        <b>R1:</b> ${r1_sorted:.2f} ({(r1_sorted/price-1)*100:.1f}% gain) - First profit target<br/>
+        <b>R2:</b> ${r2_sorted:.2f} ({(r2_sorted/price-1)*100:.1f}% gain) - Major resistance<br/>
+        <b>R3:</b> ${r3_sorted:.2f} ({(r3_sorted/price-1)*100:.1f}% gain) - Full rally target<br/>
         <br/>
         <b>Strategy:</b> Take partial profits at each level, trail stops higher
         """
@@ -397,9 +436,9 @@ def create_pdf_report(buy_df, all_results_df, output_file, timestamp_str):
         elements.append(Paragraph("<b>Technical Structure</b>", section_style))
         tech_data = [
             ['Level', 'Price', 'Type', 'Note'],
-            ['R3', f"${r3:.2f}", 'Major Resistance', 'Full rally target'],
-            ['R2', f"${r2:.2f}", 'Key Resistance', 'Strong profit zone'],
-            ['R1', f"${r1:.2f}", 'Minor Resistance', 'First exit'],
+            ['R3', f"${r3_sorted:.2f}", 'Major Resistance', 'Full rally target'],
+            ['R2', f"${r2_sorted:.2f}", 'Key Resistance', 'Strong profit zone'],
+            ['R1', f"${r1_sorted:.2f}", 'Minor Resistance', 'First exit'],
             ['Current', f"${price:.2f}", 'Market Price', 'Entry consideration'],
             ['POC', f"${daily_poc:.2f}" if not pd.isna(daily_poc) else 'N/A', 'Volume Node', 'Support'],
             ['D50', f"${d50:.2f}" if not pd.isna(d50) else 'N/A', 'MA Support', 'Short-term trend'],
