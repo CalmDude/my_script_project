@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 .env
 
+# Email configuration (contains sensitive credentials)
+email_config.json
+
 # Generated output files (should only exist in Downloads, not workspace)
 batch_results.csv
 batch_results_*.csv
