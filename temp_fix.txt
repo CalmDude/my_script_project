@@ -1,0 +1,21 @@
+﻿# Signal descriptions for portfolio guidance
+def get_signal_description(signal):
+    ""\"Return detailed guidance for each Larsson signal based on weekly/daily state combination.""\"
+    descriptions = {
+        ""\"FULL HOLD + ADD""\": ""\"Strongest bullish alignment - macro and short-term trends fully confirmed. Hold full position and gradually add on dips for compounding. Prioritize capital preservation: adds only in confirmed strength.""\",
+
+        ""\"HOLD""\": ""\"Macro bull intact, short-term pause or inconclusive. Hold full position patiently - no need to act. Avoid new adds or reductions; wait for daily resolution back to strength.""\",
+
+        ""\"HOLD MOST +REDUCE""\": ""\"Macro bull with short-term correction. Hold majority position but make gradual reductions into strength if pullback deepens. Lighten to preserve profits - scale out on rallies.""\",
+
+        ""\"SCALE IN""\": ""\"Potential emerging bull - short-term strength without macro confirmation yet. Scale in gradually on dips, building position in small increments. Stay disciplined: only add if daily remains strong; keep significant cash reserve.""\",
+
+        ""\"LIGHT / CASH""\": ""\"Inconclusive - no clear trend on either timeframe. Remain mostly in cash or very light position. Wait patiently for alignment; tiny probes only on extreme conviction signals.""\",
+
+        ""\"CASH""\": ""\"Uncertain or weak conditions. Stay mostly or fully in cash - no new buys. Make reductions to any remaining exposure if weakness persists. Wait for clearer signal before re-engaging.""\",
+
+        ""\"REDUCE""\": ""\"Macro bear risk despite short-term bounce. Make gradual reductions into strength/rallies. De-risk toward majority cash - do not add. Bounces are opportunities to exit.""\",
+
+        ""\"FULL CASH / DEFEND""\": ""\"Strongest bearish alignment - macro and short-term trends fully down. Full cash position; aggressively protect capital. Exit any remaining longs through disciplined reductions.""\"
+    }
+    return descriptions.get(signal, ""\"No guidance available for this signal.""\")
