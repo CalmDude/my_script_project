@@ -107,17 +107,12 @@ def run_portfolio_analysis():
         print("Executing notebook cells...\n")
         ep.preprocess(nb, {'metadata': {'path': str(notebook_path.parent)}})
 
-        # Save executed notebook (optional - with timestamp)
+        # Get timestamp for finding generated reports
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        output_path = notebook_path.parent / f'portfolio_analysis_executed_{timestamp}.ipynb'
-
-        with open(output_path, 'w', encoding='utf-8') as f:
-            nbformat.write(nb, f)
 
         print(f"\n{'='*80}")
         print(f"✅ SUCCESS - Portfolio analysis completed")
         print(f"Finished: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"Executed notebook saved: {output_path.name}")
 
         # Find the generated PDF
         timestamp_pattern = timestamp  # Use same timestamp from notebook execution
