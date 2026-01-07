@@ -1,0 +1,18 @@
+# Individual stocks
+TSLA
+NVDA
+MSFT
+META
+PLTR
+MSTR
+ASML
+AMD
+AVGO
+ALAB
+MRVL
+BTC-USD
+SOL-USD
+
+# Baskets - format: [Basket Name] ticker1, ticker2, ticker3
+[Main AI Basket] TSLA, NVDA, MSFT, META, PLTR, ASML
+[Secondary AI Basket] AMD, AVGO, ALAB, MRVL

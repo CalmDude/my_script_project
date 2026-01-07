@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual Environments
+.venv/
+.venv_stable/
+venv/
+ENV/
+env/
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+email_config.json
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+.tox/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Cache & Temporary Files
+.scanner_cache/
+scanner_cache/
+*.log
+*.tmp
+*.temp
+
+# Generated Reports & Data
+scanner_results/*.pdf
+scanner_results/*.xlsx
+portfolio_results/*.pdf
+portfolio_results/*.xlsx
+!scanner_results/archive/
+!portfolio_results/archive/
+
+# CI/CD
+.github/workflows/*.log
+ci_logs/
+
+# Operating System
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db

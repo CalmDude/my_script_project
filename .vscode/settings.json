@@ -1,0 +1,22 @@
+{
+    "python.defaultInterpreterPath": "C:/workspace/portfolio_analyser/.venv/Scripts/python.exe",
+    "black-formatter.interpreter": [
+        "C:/workspace/portfolio_analyser/.venv/Scripts/python.exe"
+    ],
+    "ruff.interpreter": [
+        "C:/workspace/portfolio_analyser/.venv/Scripts/python.exe"
+    ],
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportArgumentType": "none"
+    },
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "scanner_cache": true,
+        "scanner_results": true,
+        "portfolio_results": true,
+        "ci_logs": true,
+        "results": true
+    }
+}
