@@ -52,12 +52,10 @@ scanner_cache/
 *.temp
 
 # Generated Reports & Data
-scanner_results/*.pdf
-scanner_results/*.xlsx
-portfolio_results/*.pdf
-portfolio_results/*.xlsx
-!scanner_results/archive/
-!portfolio_results/archive/
+scanner_results/
+portfolio_results/
+!scanner_results/archive/.gitkeep
+!portfolio_results/archive/.gitkeep
 
 # CI/CD
 .github/workflows/*.log

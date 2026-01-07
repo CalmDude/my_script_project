@@ -436,3 +436,59 @@ def create_portfolio_tracker_excel(portfolio_data, output_path):
     # Save workbook
     wb.save(output_path)
     return output_path
+
+
+def cleanup_old_reports(results_dir, max_files=3, archive_retention_days=90):
+    """
+    Keep only the most recent portfolio reports
+    Move older ones to archive, delete archive files older than archive_retention_days
+
+    Args:
+        results_dir: Directory containing portfolio results
+        max_files: Number of most recent files to keep
+        archive_retention_days: Days to keep files in archive before deletion
+    """
+    from datetime import datetime, timedelta
+    import time
+
+    archive_dir = results_dir / 'archive'
+    archive_dir.mkdir(exist_ok=True)
+
+    total_archived = 0
+
+    # Get all PDF and Excel files
+    pdf_files = sorted(results_dir.glob('trading_playbook_*.pdf'), key=lambda p: p.stat().st_mtime, reverse=True)
+    xlsx_files = sorted(results_dir.glob('portfolio_tracker_*.xlsx'), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    # Move files beyond max_files to archive
+    for old_file in pdf_files[max_files:]:
+        archive_path = archive_dir / old_file.name
+        old_file.rename(archive_path)
+        print(f"  📦 Archived: {old_file.name}")
+        total_archived += 1
+
+    for old_file in xlsx_files[max_files:]:
+        archive_path = archive_dir / old_file.name
+        old_file.rename(archive_path)
+        print(f"  📦 Archived: {old_file.name}")
+        total_archived += 1
+
+    if total_archived > 0:
+        print(f"  ✅ Archived {total_archived} file(s), kept {max_files} most recent")
+    else:
+        print(f"  ✅ No files to archive (only {max_files} or fewer exist)")
+
+    # Delete archive files older than retention period
+    cutoff_time = time.time() - (archive_retention_days * 86400)
+    deleted_count = 0
+
+    for archive_file in archive_dir.glob('*'):
+        if archive_file.is_file() and archive_file.stat().st_mtime < cutoff_time:
+            try:
+                archive_file.unlink()
+                deleted_count += 1
+            except Exception as e:
+                print(f"  ⚠️  Could not delete {archive_file.name}: {e}")
+
+    if deleted_count > 0:
+        print(f"  🗑️  Deleted {deleted_count} archive file(s) older than {archive_retention_days} days")
