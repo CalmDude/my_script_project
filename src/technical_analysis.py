@@ -16,14 +16,16 @@ import hashlib
 # Determine project root (go up from src/ to portfolio_analyser/)
 _MODULE_DIR = Path(__file__).parent
 _PROJECT_ROOT = _MODULE_DIR.parent
-CACHE_DIR = _PROJECT_ROOT / '.scanner_cache'
+CACHE_DIR = _PROJECT_ROOT / ".scanner_cache"
 CACHE_TTL_HOURS = 24
+
 
 def _get_cache_path(ticker, daily_bars, weekly_bars):
     """Generate cache file path for a ticker with specific parameters"""
     CACHE_DIR.mkdir(exist_ok=True)
     cache_key = f"{ticker}_{daily_bars}_{weekly_bars}"
     return CACHE_DIR / f"{cache_key}.json"
+
 
 def _load_from_cache(ticker, daily_bars, weekly_bars):
     """Load cached result if it exists and is not expired"""
@@ -33,38 +35,38 @@ def _load_from_cache(ticker, daily_bars, weekly_bars):
         return None
 
     try:
-        with open(cache_path, 'r') as f:
+        with open(cache_path, "r") as f:
             cached = json.load(f)
 
         # Check if cache is expired
-        cached_time = datetime.fromisoformat(cached['cached_at'])
+        cached_time = datetime.fromisoformat(cached["cached_at"])
         age_hours = (datetime.now() - cached_time).total_seconds() / 3600
 
         if age_hours > CACHE_TTL_HOURS:
             cache_path.unlink()  # Delete expired cache
             return None
 
-        return cached['data']
+        return cached["data"]
     except:
         return None
+
 
 def _save_to_cache(ticker, daily_bars, weekly_bars, data):
     """Save analysis result to cache"""
     cache_path = _get_cache_path(ticker, daily_bars, weekly_bars)
 
     try:
-        cached = {
-            'cached_at': datetime.now().isoformat(),
-            'data': data
-        }
-        with open(cache_path, 'w') as f:
+        cached = {"cached_at": datetime.now().isoformat(), "data": data}
+        with open(cache_path, "w") as f:
             json.dump(cached, f)
     except:
         pass  # Silently fail if caching doesn't work
 
+
 def _smart_delay():
     """Add random delay between 1-2 seconds to avoid rate limiting"""
     time.sleep(random.uniform(1.0, 2.0))
+
 
 # Parse stocks.txt file to extract individual tickers and baskets
 def parse_stocks_file(filepath):
@@ -76,17 +78,19 @@ def parse_stocks_file(filepath):
     individual_tickers = []
     baskets = {}
 
-    with open(filepath, 'r', encoding='utf-8') as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             # Skip empty lines and comments
-            if not line or line.startswith('#'):
+            if not line or line.startswith("#"):
                 continue
             # Check for basket definition: [Basket Name] ticker1, ticker2, ticker3
-            basket_match = re.match(r'\[([^\]]+)\]\s*(.+)', line)
+            basket_match = re.match(r"\[([^\]]+)\]\s*(.+)", line)
             if basket_match:
                 basket_name = basket_match.group(1).strip()
-                ticker_list = [t.strip().upper() for t in basket_match.group(2).split(',')]
+                ticker_list = [
+                    t.strip().upper() for t in basket_match.group(2).split(",")
+                ]
                 baskets[basket_name] = ticker_list
             else:
                 # Individual ticker
@@ -97,45 +101,40 @@ def parse_stocks_file(filepath):
     return individual_tickers, baskets
 
 
-
 # Confluence logic removed - no longer used in reports
+
 
 # Signal descriptions for portfolio guidance
 def get_signal_description(signal):
     """Return detailed guidance for each Larsson signal based on weekly/daily state combination."""
     descriptions = {
         "FULL HOLD + ADD": "Strongest bullish alignment - macro and short-term trends fully confirmed. Hold full position and gradually add on dips for compounding. Prioritize capital preservation: adds only in confirmed strength.",
-
         "HOLD": "Macro bull intact, short-term pause or inconclusive. Hold full position patiently - no need to act. Avoid new adds or reductions; wait for daily resolution back to strength.",
-
         "HOLD MOST + REDUCE": "Macro bull with short-term correction. Hold majority position but make gradual reductions into strength if pullback deepens. Lighten to preserve profits - scale out on rallies.",
-
         "SCALE IN": "Potential emerging bull - short-term strength without macro confirmation yet. Scale in gradually on dips, building position in small increments. Stay disciplined: only add if daily remains strong; keep significant cash reserve.",
-
         "LIGHT / CASH": "Inconclusive - no clear trend on either timeframe. Remain mostly in cash or very light position. Wait patiently for alignment; tiny probes only on extreme conviction signals.",
-
         "CASH": "Uncertain or weak conditions. Stay mostly or fully in cash - no new buys. Make reductions to any remaining exposure if weakness persists. Wait for clearer signal before re-engaging.",
-
         "REDUCE": "Macro bear risk despite short-term bounce. Make gradual reductions into strength/rallies. De-risk toward majority cash - do not add. Bounces are opportunities to exit.",
-
-        "FULL CASH / DEFEND": "Strongest bearish alignment - macro and short-term trends fully down. Full cash position; aggressively protect capital. Exit any remaining longs through disciplined reductions."
+        "FULL CASH / DEFEND": "Strongest bearish alignment - macro and short-term trends fully down. Full cash position; aggressively protect capital. Exit any remaining longs through disciplined reductions.",
     }
     return descriptions.get(signal, "No guidance available for this signal.")
+
 
 # Capital Protection - Reduction Calculations
 def calculate_reduction_amounts(signal, current_value):
     """Calculate position reduction amounts based on signal severity"""
     reduction_targets = {
         "HOLD MOST + REDUCE": 0.20,  # Keep 80% - weekly bull intact
-        "REDUCE": 0.40,              # Keep 60% - weekly bearish, daily bounce
-        "LIGHT / CASH": 0.60,        # Keep 40% - both neutral/unclear
-        "CASH": 0.80,                # Keep 20% - serious warning
-        "FULL CASH / DEFEND": 1.00   # Full exit - both bearish (phased)
+        "REDUCE": 0.40,  # Keep 60% - weekly bearish, daily bounce
+        "LIGHT / CASH": 0.60,  # Keep 40% - both neutral/unclear
+        "CASH": 0.80,  # Keep 20% - serious warning
+        "FULL CASH / DEFEND": 1.00,  # Full exit - both bearish (phased)
     }
     reduction_pct = reduction_targets.get(signal, 0)
     reduction_amount = current_value * reduction_pct
     keep_amount = current_value - reduction_amount
     return reduction_amount, keep_amount, reduction_pct
+
 
 def get_reduction_tranches(signal, reduction_pct, reduction_amount):
     """Return phased tranches for position reductions to avoid panic selling"""
@@ -148,14 +147,14 @@ def get_reduction_tranches(signal, reduction_pct, reduction_amount):
     elif reduction_pct <= 0.60:
         return [
             (reduction_amount * 0.67, 0.40, "Immediate - at R1 or current"),
-            (reduction_amount * 0.33, 0.20, "On bounce - at R2+")
+            (reduction_amount * 0.33, 0.20, "On bounce - at R2+"),
         ]
 
     # Two tranches for heavy reductions (80%)
     elif reduction_pct <= 0.80:
         return [
             (reduction_amount * 0.625, 0.50, "Immediate - at R1 or current"),
-            (reduction_amount * 0.375, 0.30, "On bounce - at R2+")
+            (reduction_amount * 0.375, 0.30, "On bounce - at R2+"),
         ]
 
     # Full exit (100%) - three tranches for best price realization
@@ -163,12 +162,14 @@ def get_reduction_tranches(signal, reduction_pct, reduction_amount):
         return [
             (reduction_amount * 0.60, 0.60, "Immediate - at R1 or current"),
             (reduction_amount * 0.30, 0.30, "On bounce - at R2"),
-            (reduction_amount * 0.10, 0.10, "Final - at R3 or any rally")
+            (reduction_amount * 0.10, 0.10, "Final - at R3 or any rally"),
         ]
+
 
 # ============================================================================
 # PORTFOLIO POSITION MANAGEMENT - Phase 2
 # ============================================================================
+
 
 def calculate_position_gap(current_value, target_pct, portfolio_total):
     """
@@ -187,14 +188,15 @@ def calculate_position_gap(current_value, target_pct, portfolio_total):
     current_pct = (current_value / portfolio_total) if portfolio_total > 0 else 0
 
     return {
-        'current_value': current_value,
-        'current_pct': current_pct,
-        'target_value': target_value,
-        'target_pct': target_pct,
-        'gap_value': gap_value,
-        'gap_pct': target_pct - current_pct,
-        'action': 'BUY' if gap_value > 0 else 'SELL' if gap_value < 0 else 'AT_TARGET'
+        "current_value": current_value,
+        "current_pct": current_pct,
+        "target_value": target_value,
+        "target_pct": target_pct,
+        "gap_value": gap_value,
+        "gap_pct": target_pct - current_pct,
+        "action": "BUY" if gap_value > 0 else "SELL" if gap_value < 0 else "AT_TARGET",
     }
+
 
 def calculate_buy_tranches(gap_value, s1, s2, s3, current_price, buy_quality):
     """
@@ -208,7 +210,7 @@ def calculate_buy_tranches(gap_value, s1, s2, s3, current_price, buy_quality):
         gap_value: Dollar amount needed to reach target
         s1, s2, s3: Support levels
         current_price: Current stock price
-        buy_quality: Quality rating (EXCELLENT/GOOD/CAUTION/EXTENDED)
+        buy_quality: Quality rating (EXCELLENT/GOOD/OK/CAUTION/EXTENDED)
 
     Returns:
         list of (price_level, dollar_amount, level_name, status)
@@ -248,7 +250,10 @@ def calculate_buy_tranches(gap_value, s1, s2, s3, current_price, buy_quality):
 
     return tranches
 
-def calculate_sell_tranches(current_value, signal, r1, r2, r3, adjusted_r1, adjusted_r2, adjusted_r3):
+
+def calculate_sell_tranches(
+    current_value, signal, r1, r2, r3, adjusted_r1, adjusted_r2, adjusted_r3
+):
     """
     Calculate sell tranches at R1/R2/R3 resistance levels based on signal.
 
@@ -276,23 +281,23 @@ def calculate_sell_tranches(current_value, signal, r1, r2, r3, adjusted_r1, adju
         "REDUCE": [
             (adjusted_r1 or r1, 0.20, "R1"),
             (adjusted_r2 or r2, 0.15, "R2"),
-            (adjusted_r3 or r3, 0.05, "R3")
+            (adjusted_r3 or r3, 0.05, "R3"),
         ],
         "LIGHT / CASH": [
             (adjusted_r1 or r1, 0.30, "R1"),
             (adjusted_r2 or r2, 0.20, "R2"),
-            (adjusted_r3 or r3, 0.10, "R3")
+            (adjusted_r3 or r3, 0.10, "R3"),
         ],
         "CASH": [
             (adjusted_r1 or r1, 0.40, "R1"),
             (adjusted_r2 or r2, 0.30, "R2"),
-            (adjusted_r3 or r3, 0.10, "R3")
+            (adjusted_r3 or r3, 0.10, "R3"),
         ],
         "FULL CASH / DEFEND": [
             (adjusted_r1 or r1, 0.50, "R1"),
             (adjusted_r2 or r2, 0.30, "R2"),
-            (adjusted_r3 or r3, 0.20, "R3")
-        ]
+            (adjusted_r3 or r3, 0.20, "R3"),
+        ],
     }
 
     if signal not in signal_reductions:
@@ -305,6 +310,7 @@ def calculate_sell_tranches(current_value, signal, r1, r2, r3, adjusted_r1, adju
             tranches.append((price_level, dollar_amount, pct, level_name, "Pending"))
 
     return tranches
+
 
 def determine_portfolio_action(signal, position_gap, buy_quality):
     """
@@ -319,7 +325,7 @@ def determine_portfolio_action(signal, position_gap, buy_quality):
     Returns:
         str: "BUY", "SELL", "HOLD", "WAIT"
     """
-    gap_value = position_gap['gap_value']
+    gap_value = position_gap["gap_value"]
 
     # Cancel buys if signal weakens
     if signal != "FULL HOLD + ADD" and gap_value > 0:
@@ -335,7 +341,13 @@ def determine_portfolio_action(signal, position_gap, buy_quality):
             return "HOLD"  # Caution - wait for better setup
 
     # Execute sells on bearish signals
-    if signal in ["HOLD MOST + REDUCE", "REDUCE", "LIGHT / CASH", "CASH", "FULL CASH / DEFEND"]:
+    if signal in [
+        "HOLD MOST + REDUCE",
+        "REDUCE",
+        "LIGHT / CASH",
+        "CASH",
+        "FULL CASH / DEFEND",
+    ]:
         if gap_value < 0:  # Over target
             return "SELL"  # Reduce anyway (over-allocated)
         elif gap_value == 0:  # At target
@@ -346,7 +358,9 @@ def determine_portfolio_action(signal, position_gap, buy_quality):
     # At target or neutral signal
     return "HOLD"
 
+
 # Recommendation logic removed - no longer used
+
 
 def analyze_basket(basket_name, constituent_tickers, daily_bars=60, weekly_bars=52):
     """
@@ -360,32 +374,37 @@ def analyze_basket(basket_name, constituent_tickers, daily_bars=60, weekly_bars=
         constituent_signals = []  # To list signals in notes
         for ticker in constituent_tickers:
             result = analyze_ticker(ticker, daily_bars, weekly_bars)
-            if 'error' not in result:
+            if "error" not in result:
                 # Fetch market cap
                 try:
                     stock = yf.Ticker(ticker)
                     info = stock.info
-                    market_cap = info.get('marketCap', 0)
+                    market_cap = info.get("marketCap", 0)
                     if market_cap and market_cap > 0:
-                        constituent_data.append({
-                            'result': result,
-                            'market_cap': market_cap
-                        })
+                        constituent_data.append(
+                            {"result": result, "market_cap": market_cap}
+                        )
                         constituent_signals.append(f"{ticker} {result['signal']}")
                 except:
                     # If can't get market cap, skip this constituent
                     pass
 
         if not constituent_data:
-            return {"ticker": basket_name, "error": "no valid constituent data with market caps"}
+            return {
+                "ticker": basket_name,
+                "error": "no valid constituent data with market caps",
+            }
 
         # Initialize basket result
-        basket_result = {'ticker': basket_name}
-        basket_result['notes'] = f"Constituents: {', '.join(constituent_signals)}"
+        basket_result = {"ticker": basket_name}
+        basket_result["notes"] = f"Constituents: {', '.join(constituent_signals)}"
 
         # Basket price as market-cap weighted average
-        price_data = [(cd['result']['current_price'], cd['market_cap'] / total_market_cap)
-                     for cd in constituent_data if cd['result']['current_price'] is not None]
+        price_data = [
+            (cd["result"]["current_price"], cd["market_cap"] / total_market_cap)
+            for cd in constituent_data
+            if cd["result"]["current_price"] is not None
+        ]
         if price_data:
             price_values = [v for v, w in price_data]
             price_weights = [w for v, w in price_data]
@@ -393,20 +412,24 @@ def analyze_basket(basket_name, constituent_tickers, daily_bars=60, weekly_bars=
             weight_sum = sum(price_weights)
             if weight_sum > 0:
                 price_weights = [w / weight_sum for w in price_weights]
-                basket_result['current_price'] = np.average(price_values, weights=price_weights)
+                basket_result["current_price"] = np.average(
+                    price_values, weights=price_weights
+                )
             else:
-                basket_result['current_price'] = None
-            basket_result['price_note'] = "market cap weighted"
-            basket_result['date'] = datetime.now().strftime("%Y-%m-%d")
+                basket_result["current_price"] = None
+            basket_result["price_note"] = "market cap weighted"
+            basket_result["date"] = datetime.now().strftime("%Y-%m-%d")
         else:
-            basket_result['current_price'] = None
+            basket_result["current_price"] = None
 
         # Basket signal as dominant signal (most common or weighted by market cap)
-        signals = [cd['result']['signal'] for cd in constituent_data]
-        basket_result['signal'] = max(set(signals), key=signals.count)  # Most common signal
+        signals = [cd["result"]["signal"] for cd in constituent_data]
+        basket_result["signal"] = max(
+            set(signals), key=signals.count
+        )  # Most common signal
 
         # Set pivots to None for baskets (no volume profile fields)
-        for field in ['s1', 's2', 's3', 'r1', 'r2', 'r3']:
+        for field in ["s1", "s2", "s3", "r1", "r2", "r3"]:
             basket_result[field] = None
 
         result = basket_result
@@ -414,21 +437,24 @@ def analyze_basket(basket_name, constituent_tickers, daily_bars=60, weekly_bars=
         return result
 
     except Exception as e:
-        return {'ticker': basket_name, 'error': str(e)}
+        return {"ticker": basket_name, "error": str(e)}
 
 
 # SMMA function (for Larsson)
 def smma(series, length):
     smma_result = pd.Series(np.nan, index=series.index)
     sma_val = series.rolling(length).mean()
-    smma_result.iloc[length-1] = sma_val.iloc[length-1]
+    smma_result.iloc[length - 1] = sma_val.iloc[length - 1]
     for i in range(length, len(series)):
-        smma_result.iloc[i] = (smma_result.iloc[i-1] * (length - 1) + series.iloc[i]) / length
+        smma_result.iloc[i] = (
+            smma_result.iloc[i - 1] * (length - 1) + series.iloc[i]
+        ) / length
     return smma_result
+
 
 # Larsson state
 def get_larsson_state(df, fast=15, slow=19, v1len=25, v2len=29):
-    hl2 = (df['High'] + df['Low']) / 2
+    hl2 = (df["High"] + df["Low"]) / 2
     v1 = smma(hl2, fast).iloc[-1]
     m1 = smma(hl2, slow).iloc[-1]
     m2 = smma(hl2, v1len).iloc[-1]
@@ -440,23 +466,28 @@ def get_larsson_state(df, fast=15, slow=19, v1len=25, v2len=29):
     p1 = not p2 and not p3
     return 1 if p1 else -1 if p3 else 0
 
+
 # Volume Profile calculation removed - no longer needed
+
 
 # Swing pivots
 def detect_swings(df, strength=12):
-    highs = df['High']
-    lows = df['Low']
+    highs = df["High"]
+    lows = df["Low"]
     swing_highs = []
     swing_lows = []
     for i in range(strength, len(df) - strength):
-        if highs.iloc[i] == highs.iloc[i-strength:i+strength+1].max():
+        if highs.iloc[i] == highs.iloc[i - strength : i + strength + 1].max():
             swing_highs.append(highs.iloc[i])
-        if lows.iloc[i] == lows.iloc[i-strength:i+strength+1].min():
+        if lows.iloc[i] == lows.iloc[i - strength : i + strength + 1].min():
             swing_lows.append(lows.iloc[i])
     return swing_highs, swing_lows
 
+
 def select_top_sr(swing_highs, swing_lows, current_price, max_levels=3):
-    resistances = sorted([p for p in set(swing_highs) if p > current_price], reverse=True)[:max_levels]
+    resistances = sorted(
+        [p for p in set(swing_highs) if p > current_price], reverse=True
+    )[:max_levels]
     supports = sorted([p for p in set(swing_lows) if p < current_price])[-max_levels:]
     while len(supports) < max_levels:
         supports.append(np.nan)
@@ -465,14 +496,16 @@ def select_top_sr(swing_highs, swing_lows, current_price, max_levels=3):
     supports = sorted(supports, reverse=True)  # S1 closest (highest)
     return supports, resistances
 
+
 def assess_buy_quality(d50, d100, d200, s1, current_price):
     """
     Assess buy quality based on MA positioning relative to S1 support.
     Returns: (quality_rating, quality_note)
 
     EXCELLENT: All MAs below S1 (clear path to support)
-    GOOD: D100 and D200 below S1 (strong support)
-    CAUTION: D100 or D200 above S1 (resistance blocking support)
+    GOOD: D100 and D200 below S1 (strong long-term support)
+    OK: Partial support but missing D100 & D200 combination (less reliable)
+    CAUTION: No MAs below S1 (resistance blocking support)
     EXTENDED: Price > 10% above all MAs (too high to buy)
     """
     if s1 is None:
@@ -502,9 +535,10 @@ def assess_buy_quality(d50, d100, d200, s1, current_price):
     elif d100 is not None and d200 is not None and d100 <= s1 and d200 <= s1:
         return "GOOD", "D100 & D200 support S1"
     elif mas_below_s1 >= 1:
-        return "GOOD", f"{mas_below_s1} of {mas_checked} MAs support S1"
+        return "OK", f"{mas_below_s1} of {mas_checked} MAs support S1"
     else:
         return "CAUTION", "MAs above S1 - resistance blocking support"
+
 
 def adjust_sell_levels_for_mas(d50, d100, d200, r1, r2, r3, current_price):
     """
@@ -543,6 +577,7 @@ def adjust_sell_levels_for_mas(d50, d100, d200, r1, r2, r3, current_price):
     feasibility_note = "; ".join(notes) if notes else "Clear path to all R-levels"
     return adjusted_r1, adjusted_r2, adjusted_r3, feasibility_note
 
+
 def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
     """Fetch data and compute indicators for a single ticker. Returns a dict with results."""
     ticker = ticker.upper()
@@ -563,8 +598,12 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
         if not info or len(info) == 0:
             return {"ticker": ticker, "error": "rate_limit_possible"}
 
-        current_price = info.get('regularMarketPrice') or info.get('preMarketPrice') or info.get('previousClose')
-        price_note = "pre-market" if 'preMarketPrice' in info else "last close"
+        current_price = (
+            info.get("regularMarketPrice")
+            or info.get("preMarketPrice")
+            or info.get("previousClose")
+        )
+        price_note = "pre-market" if "preMarketPrice" in info else "last close"
         today = datetime.now().strftime("%Y-%m-%d")
 
         # Daily data
@@ -578,23 +617,37 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             return {"ticker": ticker, "error": "no weekly data"}
 
         # Calculate daily SMAs (D50, D100, D200)
-        d50 = daily['Close'].rolling(50).mean().iloc[-1] if len(daily) >= 50 else None
-        d100 = daily['Close'].rolling(100).mean().iloc[-1] if len(daily) >= 100 else None
-        d200 = daily['Close'].rolling(200).mean().iloc[-1] if len(daily) >= 200 else None
+        d50 = daily["Close"].rolling(50).mean().iloc[-1] if len(daily) >= 50 else None
+        d100 = (
+            daily["Close"].rolling(100).mean().iloc[-1] if len(daily) >= 100 else None
+        )
+        d200 = (
+            daily["Close"].rolling(200).mean().iloc[-1] if len(daily) >= 200 else None
+        )
 
         # Pivots
         daily_highs, daily_lows = detect_swings(daily)
-        daily_supports, daily_resistances = select_top_sr(daily_highs, daily_lows, current_price)
+        daily_supports, daily_resistances = select_top_sr(
+            daily_highs, daily_lows, current_price
+        )
         weekly_highs, weekly_lows = detect_swings(weekly)
-        weekly_supports, weekly_resistances = select_top_sr(weekly_highs, weekly_lows, current_price)
+        weekly_supports, weekly_resistances = select_top_sr(
+            weekly_highs, weekly_lows, current_price
+        )
 
         # Signal
         daily_state = get_larsson_state(daily)
         weekly_state = get_larsson_state(weekly)
         mapping = {
-            (1,1): "FULL HOLD + ADD", (1,0): "HOLD", (1,-1): "HOLD MOST + REDUCE",
-            (0,1): "SCALE IN", (0,0): "LIGHT / CASH", (0,-1): "CASH",
-            (-1,1): "REDUCE", (-1,0): "CASH", (-1,-1): "FULL CASH / DEFEND"
+            (1, 1): "FULL HOLD + ADD",
+            (1, 0): "HOLD",
+            (1, -1): "HOLD MOST + REDUCE",
+            (0, 1): "SCALE IN",
+            (0, 0): "LIGHT / CASH",
+            (0, -1): "CASH",
+            (-1, 1): "REDUCE",
+            (-1, 0): "CASH",
+            (-1, -1): "FULL CASH / DEFEND",
         }
         signal = mapping.get((weekly_state, daily_state), "UNKNOWN")
 
@@ -607,39 +660,41 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
         r3 = float(daily_resistances[2]) if not pd.isna(daily_resistances[2]) else None
 
         # Assess buy quality (MA confluence with S1)
-        buy_quality, buy_quality_note = assess_buy_quality(d50, d100, d200, s1, current_price)
+        buy_quality, buy_quality_note = assess_buy_quality(
+            d50, d100, d200, s1, current_price
+        )
 
         # Adjust sell levels for MA resistance
-        adjusted_r1, adjusted_r2, adjusted_r3, sell_feasibility_note = adjust_sell_levels_for_mas(
-            d50, d100, d200, r1, r2, r3, current_price
+        adjusted_r1, adjusted_r2, adjusted_r3, sell_feasibility_note = (
+            adjust_sell_levels_for_mas(d50, d100, d200, r1, r2, r3, current_price)
         )
 
         result = {
-            'ticker': ticker,
-            'signal': signal,
-            'current_price': current_price,
-            'price_note': price_note,
-            'date': today,
+            "ticker": ticker,
+            "signal": signal,
+            "current_price": current_price,
+            "price_note": price_note,
+            "date": today,
             # Support/Resistance levels
-            's1': s1,
-            's2': s2,
-            's3': s3,
-            'r1': r1,
-            'r2': r2,
-            'r3': r3,
+            "s1": s1,
+            "s2": s2,
+            "s3": s3,
+            "r1": r1,
+            "r2": r2,
+            "r3": r3,
             # Moving averages
-            'd50': float(d50) if d50 is not None and not pd.isna(d50) else None,
-            'd100': float(d100) if d100 is not None and not pd.isna(d100) else None,
-            'd200': float(d200) if d200 is not None and not pd.isna(d200) else None,
+            "d50": float(d50) if d50 is not None and not pd.isna(d50) else None,
+            "d100": float(d100) if d100 is not None and not pd.isna(d100) else None,
+            "d200": float(d200) if d200 is not None and not pd.isna(d200) else None,
             # Buy quality assessment
-            'buy_quality': buy_quality,
-            'buy_quality_note': buy_quality_note,
+            "buy_quality": buy_quality,
+            "buy_quality_note": buy_quality_note,
             # Adjusted sell levels (MA-aware)
-            'adjusted_r1': float(adjusted_r1) if adjusted_r1 is not None else r1,
-            'adjusted_r2': float(adjusted_r2) if adjusted_r2 is not None else r2,
-            'adjusted_r3': float(adjusted_r3) if adjusted_r3 is not None else r3,
-            'sell_feasibility_note': sell_feasibility_note,
-            'notes': ''
+            "adjusted_r1": float(adjusted_r1) if adjusted_r1 is not None else r1,
+            "adjusted_r2": float(adjusted_r2) if adjusted_r2 is not None else r2,
+            "adjusted_r3": float(adjusted_r3) if adjusted_r3 is not None else r3,
+            "sell_feasibility_note": sell_feasibility_note,
+            "notes": "",
         }
 
         # Save to cache
@@ -647,19 +702,32 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
 
         return result
     except Exception as e:
-        return {'ticker': ticker, 'error': str(e)}
+        return {"ticker": ticker, "error": str(e)}
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import argparse
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    parser = argparse.ArgumentParser(description='Analyze tickers and save results to CSV')
+
+    parser = argparse.ArgumentParser(
+        description="Analyze tickers and save results to CSV"
+    )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--tickers', nargs='+', help='Space-separated list of tickers to analyze')
-    group.add_argument('--file', help='Path to file with one ticker per line')
-    parser.add_argument('--output', '-o', default='results.csv', help='Output CSV file path')
-    parser.add_argument('--concurrency', '-c', type=int, default=4, help='Number of concurrent workers')
-    parser.add_argument('--save-per-symbol', action='store_true', help='Save individual CSVs per ticker in ./results')
+    group.add_argument(
+        "--tickers", nargs="+", help="Space-separated list of tickers to analyze"
+    )
+    group.add_argument("--file", help="Path to file with one ticker per line")
+    parser.add_argument(
+        "--output", "-o", default="results.csv", help="Output CSV file path"
+    )
+    parser.add_argument(
+        "--concurrency", "-c", type=int, default=4, help="Number of concurrent workers"
+    )
+    parser.add_argument(
+        "--save-per-symbol",
+        action="store_true",
+        help="Save individual CSVs per ticker in ./results",
+    )
     args = parser.parse_args()
 
     # Build ticker list
@@ -667,7 +735,7 @@ if __name__ == '__main__':
     if args.tickers:
         tickers = [t.upper() for t in args.tickers]
     else:
-        with open(args.file, 'r', encoding='utf-8') as f:
+        with open(args.file, "r", encoding="utf-8") as f:
             tickers = [line.strip().upper() for line in f if line.strip()]
 
     results = []
@@ -676,26 +744,29 @@ if __name__ == '__main__':
         for fut in as_completed(futures):
             res = fut.result()
             results.append(res)
-            t = res.get('ticker')
-            if 'error' in res:
+            t = res.get("ticker")
+            if "error" in res:
                 print(f"{t}: ERROR: {res['error']}")
             else:
                 print(f"{t}: {res['signal']} @ {res['current_price']}")
                 if args.save_per_symbol:
                     import os
-                    os.makedirs('results', exist_ok=True)
+
+                    os.makedirs("results", exist_ok=True)
                     import csv
-                    path = os.path.join('results', f"{t}.csv")
-                    with open(path, 'w', newline='', encoding='utf-8') as csvfile:
+
+                    path = os.path.join("results", f"{t}.csv")
+                    with open(path, "w", newline="", encoding="utf-8") as csvfile:
                         writer = csv.DictWriter(csvfile, fieldnames=list(res.keys()))
                         writer.writeheader()
                         writer.writerow(res)
 
     # Save combined CSV
     import csv
+
     keys = set().union(*(r.keys() for r in results))
     keys = sorted(keys)
-    with open(args.output, 'w', newline='', encoding='utf-8') as out:
+    with open(args.output, "w", newline="", encoding="utf-8") as out:
         writer = csv.DictWriter(out, fieldnames=keys)
         writer.writeheader()
         for r in results:
