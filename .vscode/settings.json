@@ -14,8 +14,8 @@
         "**/__pycache__": true,
         "**/*.pyc": true,
         "scanner_cache": true,
-        "scanner_results": true,
-        "portfolio_results": true,
+        "scanner_results": false,
+        "portfolio_results": false,
         "ci_logs": true,
         "results": true
     }
