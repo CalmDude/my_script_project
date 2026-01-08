@@ -198,22 +198,24 @@ def calculate_position_gap(current_value, target_pct, portfolio_total):
     }
 
 
-def calculate_buy_tranches(gap_value, s1, s2, s3, current_price, buy_quality):
+def calculate_buy_tranches(
+    gap_value, s1, s2, s3, current_price, s1_quality, s2_quality, s3_quality
+):
     """
-    Calculate buy tranches at S3/S2/S1 support levels.
+    Calculate buy tranches at S3/S2/S1 support levels with individual quality ratings.
 
     Strategy: Deepest first (S3), patient buying on dips
+    - Allocate more to higher quality levels
     - If extended or price > S1: WAIT for dip
-    - Split gap across 3 levels
 
     Args:
         gap_value: Dollar amount needed to reach target
         s1, s2, s3: Support levels
         current_price: Current stock price
-        buy_quality: Quality rating (EXCELLENT/GOOD/OK/CAUTION/EXTENDED)
+        s1_quality, s2_quality, s3_quality: Tuples of (rating, note) for each level
 
     Returns:
-        list of (price_level, dollar_amount, level_name, status)
+        list of (price_level, dollar_amount, level_name, status, quality_rating, quality_note)
     """
     if gap_value <= 0:
         return []
@@ -223,36 +225,61 @@ def calculate_buy_tranches(gap_value, s1, s2, s3, current_price, buy_quality):
     tranches = []
 
     # Add tranches for levels we can reach (price above them)
-    if s3:
+    if s3 and s3_quality:
         if current_price > s1 if s1 else False:
             status = "Wait for dip to S3"
         else:
             status = "Pending"
-        tranches.append((s3, gap_value * 0.40, "S3", status))
+        tranches.append(
+            (s3, gap_value * 0.40, "S3", status, s3_quality[0], s3_quality[1])
+        )
 
-    if s2:
+    if s2 and s2_quality:
         if current_price > s1 if s1 else False:
             status = "Wait for dip to S2"
         else:
             status = "Pending"
-        tranches.append((s2, gap_value * 0.35, "S2", status))
+        tranches.append(
+            (s2, gap_value * 0.35, "S2", status, s2_quality[0], s2_quality[1])
+        )
 
-    if s1:
+    if s1 and s1_quality:
         if current_price > s1 if s1 else False:
             status = "Wait for dip to S1"
         else:
             status = "Pending"
-        tranches.append((s1, gap_value * 0.25, "S1", status))
+        tranches.append(
+            (s1, gap_value * 0.25, "S1", status, s1_quality[0], s1_quality[1])
+        )
 
     # If price already below all supports, buy at current price
     if not tranches:
-        tranches.append((current_price, gap_value, "Current", "Execute now - below S3"))
+        tranches.append(
+            (
+                current_price,
+                gap_value,
+                "Current",
+                "Execute now - below S3",
+                "N/A",
+                "Below all support levels",
+            )
+        )
 
     return tranches
 
 
 def calculate_sell_tranches(
-    current_value, signal, r1, r2, r3, adjusted_r1, adjusted_r2, adjusted_r3
+    current_value,
+    signal,
+    r1,
+    r2,
+    r3,
+    adjusted_r1,
+    adjusted_r2,
+    adjusted_r3,
+    r1_quality=None,
+    r2_quality=None,
+    r3_quality=None,
 ):
     """
     Calculate sell tranches at R1/R2/R3 resistance levels based on signal.
@@ -271,10 +298,21 @@ def calculate_sell_tranches(
         signal: Larsson signal
         r1, r2, r3: Original resistance levels
         adjusted_r1, adjusted_r2, adjusted_r3: MA-adjusted levels
+        r1_quality, r2_quality, r3_quality: Quality tuples (rating, note)
 
     Returns:
-        list of (price_level, dollar_amount, pct_of_position, level_name, status)
+        list of (price_level, dollar_amount, pct_of_position, level_name, status, quality, quality_note)
     """
+    # Default quality values
+    if r1_quality is None:
+        r1_quality = ("N/A", "")
+    if r2_quality is None:
+        r2_quality = ("N/A", "")
+    if r3_quality is None:
+        r3_quality = ("N/A", "")
+
+    quality_map = {"R1": r1_quality, "R2": r2_quality, "R3": r3_quality}
+
     # Signal to reduction mapping
     signal_reductions = {
         "HOLD MOST + REDUCE": [(adjusted_r1 or r1, 0.20, "R1")],
@@ -307,7 +345,18 @@ def calculate_sell_tranches(
     for price_level, pct, level_name in signal_reductions[signal]:
         if price_level is not None:
             dollar_amount = current_value * pct
-            tranches.append((price_level, dollar_amount, pct, level_name, "Pending"))
+            quality, quality_note = quality_map.get(level_name, ("N/A", ""))
+            tranches.append(
+                (
+                    price_level,
+                    dollar_amount,
+                    pct,
+                    level_name,
+                    "Pending",
+                    quality,
+                    quality_note,
+                )
+            )
 
     return tranches
 
@@ -333,7 +382,7 @@ def determine_portfolio_action(signal, position_gap, buy_quality):
 
     # Execute buys only on FULL HOLD + ADD
     if signal == "FULL HOLD + ADD" and gap_value > 0:
-        if buy_quality in ["EXCELLENT", "GOOD"]:
+        if buy_quality in ["EXCELLENT", "GOOD", "OK"]:
             return "BUY"
         elif buy_quality == "EXTENDED":
             return "WAIT"  # Wait for pullback
@@ -467,77 +516,512 @@ def get_larsson_state(df, fast=15, slow=19, v1len=25, v2len=29):
     return 1 if p1 else -1 if p3 else 0
 
 
-# Volume Profile calculation removed - no longer needed
+# ============================================================================
+# VOLUME PROFILE (VRVP - Volume Range Visible Price)
+# ============================================================================
+
+
+def calculate_volume_profile(df, price_bins=50):
+    """
+    Calculate volume profile for the visible range (dataframe passed).
+
+    Returns dict with:
+    - poc: Point of Control (price with highest volume)
+    - vah: Value Area High (top of 70% volume range)
+    - val: Value Area Low (bottom of 70% volume range)
+    - hvn_levels: High Volume Nodes (prices with significant volume clusters)
+    - lvn_levels: Low Volume Nodes (prices with low volume - breakout zones)
+    """
+    if df.empty or "Volume" not in df.columns:
+        return None
+
+    # Get price range
+    price_min = df["Low"].min()
+    price_max = df["High"].max()
+
+    # Create price bins
+    bin_edges = np.linspace(price_min, price_max, price_bins + 1)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+
+    # Accumulate volume at each price level
+    volume_at_price = np.zeros(price_bins)
+
+    for _, row in df.iterrows():
+        # Find which bins this bar's price range covers
+        low_idx = np.searchsorted(bin_edges, row["Low"], side="right") - 1
+        high_idx = np.searchsorted(bin_edges, row["High"], side="left")
+
+        # Distribute volume across the price range
+        bins_covered = max(1, high_idx - low_idx)
+        volume_per_bin = row["Volume"] / bins_covered
+
+        for i in range(max(0, low_idx), min(price_bins, high_idx)):
+            volume_at_price[i] += volume_per_bin
+
+    # Point of Control (POC) - price with highest volume
+    poc_idx = np.argmax(volume_at_price)
+    poc = bin_centers[poc_idx]
+
+    # Value Area (70% of total volume)
+    total_volume = volume_at_price.sum()
+    target_volume = total_volume * 0.70
+
+    # Expand from POC until we reach 70% volume
+    accumulated_volume = volume_at_price[poc_idx]
+    val_idx = poc_idx
+    vah_idx = poc_idx
+
+    while accumulated_volume < target_volume:
+        # Check which direction has more volume
+        expand_down = val_idx > 0
+        expand_up = vah_idx < price_bins - 1
+
+        if not expand_down and not expand_up:
+            break
+
+        vol_below = volume_at_price[val_idx - 1] if expand_down else 0
+        vol_above = volume_at_price[vah_idx + 1] if expand_up else 0
+
+        if vol_below >= vol_above and expand_down:
+            val_idx -= 1
+            accumulated_volume += volume_at_price[val_idx]
+        elif expand_up:
+            vah_idx += 1
+            accumulated_volume += volume_at_price[vah_idx]
+        else:
+            break
+
+    val = bin_centers[val_idx]
+    vah = bin_centers[vah_idx]
+
+    # Identify High Volume Nodes (HVN) - top 20% volume bins
+    volume_threshold_hvn = np.percentile(volume_at_price, 80)
+    hvn_indices = np.where(volume_at_price >= volume_threshold_hvn)[0]
+    hvn_levels = [bin_centers[i] for i in hvn_indices]
+
+    # Identify Low Volume Nodes (LVN) - bottom 20% volume bins
+    volume_threshold_lvn = np.percentile(volume_at_price, 20)
+    lvn_indices = np.where(volume_at_price <= volume_threshold_lvn)[0]
+    lvn_levels = [bin_centers[i] for i in lvn_indices]
+
+    return {
+        "poc": float(poc),
+        "vah": float(vah),
+        "val": float(val),
+        "hvn_levels": hvn_levels,
+        "lvn_levels": lvn_levels,
+        "volume_profile": volume_at_price.tolist(),
+        "price_bins": bin_centers.tolist(),
+    }
+
+
+def find_nearest_hvn_lvn(current_price, hvn_levels, lvn_levels):
+    """
+    Find nearest HVN above/below and LVN above/below current price.
+
+    Returns:
+    - hvn_above: Nearest HVN resistance above current price
+    - hvn_below: Nearest HVN support below current price
+    - lvn_above: Nearest LVN above (potential breakout target)
+    - lvn_below: Nearest LVN below (potential breakdown level)
+    """
+    hvn_above = min([h for h in hvn_levels if h > current_price], default=None)
+    hvn_below = max([h for h in hvn_levels if h < current_price], default=None)
+    lvn_above = min([l for l in lvn_levels if l > current_price], default=None)
+    lvn_below = max([l for l in lvn_levels if l < current_price], default=None)
+
+    return hvn_above, hvn_below, lvn_above, lvn_below
 
 
 # Swing pivots
-def detect_swings(df, strength=12):
+def detect_swings(df, strength=12, strength_resistance=None):
+    """
+    Detect swing highs and lows.
+    strength_resistance: Optional separate strength for resistance detection (lower = more recent levels)
+    """
     highs = df["High"]
     lows = df["Low"]
     swing_highs = []
     swing_lows = []
-    for i in range(strength, len(df) - strength):
-        if highs.iloc[i] == highs.iloc[i - strength : i + strength + 1].max():
+
+    # Use separate strength for resistances if provided
+    r_strength = strength_resistance if strength_resistance is not None else strength
+
+    # Detect swing highs (resistances) with potentially lower strength
+    for i in range(r_strength, len(df) - r_strength):
+        if highs.iloc[i] == highs.iloc[i - r_strength : i + r_strength + 1].max():
             swing_highs.append(highs.iloc[i])
+
+    # Detect swing lows (supports) with original strength
+    for i in range(strength, len(df) - strength):
         if lows.iloc[i] == lows.iloc[i - strength : i + strength + 1].min():
             swing_lows.append(lows.iloc[i])
+
     return swing_highs, swing_lows
 
 
-def select_top_sr(swing_highs, swing_lows, current_price, max_levels=3):
-    resistances = sorted(
-        [p for p in set(swing_highs) if p > current_price], reverse=True
-    )[:max_levels]
+def select_top_sr(
+    swing_highs,
+    swing_lows,
+    current_price,
+    max_levels=3,
+    poc=None,
+    hvn_above=None,
+    max_resistance_pct=30,
+):
+    """
+    Select top support and resistance levels.
+
+    Args:
+        max_resistance_pct: Filter out resistances more than this % above current price (default 30%)
+        poc: Point of Control from volume profile (priority resistance if available)
+        hvn_above: High Volume Node above current price (priority resistance if available)
+    """
+    # Supports - unchanged logic
     supports = sorted([p for p in set(swing_lows) if p < current_price])[-max_levels:]
+
+    # Resistances - blend swing highs with volume profile levels
+    resistance_candidates = []
+
+    # Add swing highs within reasonable distance
+    max_price = current_price * (1 + max_resistance_pct / 100)
+    for p in set(swing_highs):
+        if current_price < p <= max_price:
+            resistance_candidates.append(p)
+
+    # Prioritize POC if it's above current price and within range
+    if poc and current_price < poc <= max_price:
+        resistance_candidates.append(poc)
+
+    # Prioritize HVN above if available and within range
+    if hvn_above and current_price < hvn_above <= max_price:
+        resistance_candidates.append(hvn_above)
+
+    # Sort resistances descending - R1 is furthest/strongest (primary target), R3 is closest
+    resistances = sorted(set(resistance_candidates), reverse=True)[:max_levels]
+
+    # Pad with NaN if needed
     while len(supports) < max_levels:
         supports.append(np.nan)
     while len(resistances) < max_levels:
         resistances.append(np.nan)
+
     supports = sorted(supports, reverse=True)  # S1 closest (highest)
     return supports, resistances
 
 
-def assess_buy_quality(d50, d100, d200, s1, current_price):
+def assess_support_volume_backing(
+    support_level, poc, vah, val, hvn_below, level_name="S1"
+):
     """
-    Assess buy quality based on MA positioning relative to S1 support.
+    Assess volume backing for support level using VRVP data.
+    Returns: ('STRONG', 'MODERATE', 'WEAK', note)
+    """
+    if support_level is None:
+        return "WEAK", f"No {level_name} available"
+
+    # Strong: Support aligns with POC or HVN (±3% tolerance)
+    if poc is not None and abs(support_level - poc) / poc <= 0.03:
+        return (
+            "STRONG",
+            f"{level_name} ${support_level:,.2f} aligns with POC ${poc:,.2f}",
+        )
+
+    if hvn_below is not None and abs(support_level - hvn_below) / hvn_below <= 0.03:
+        return (
+            "STRONG",
+            f"{level_name} ${support_level:,.2f} aligns with HVN ${hvn_below:,.2f}",
+        )
+
+    # Moderate: Support within Value Area
+    if val is not None and vah is not None:
+        if val <= support_level <= vah:
+            return (
+                "MODERATE",
+                f"{level_name} ${support_level:,.2f} in Value Area (${val:,.2f}-${vah:,.2f})",
+            )
+
+    # Support near but below Value Area (within 3% below VAL)
+    if val is not None and val * 0.97 <= support_level < val:
+        return (
+            "MODERATE",
+            f"{level_name} ${support_level:,.2f} near but below Value Area Low ${val:,.2f}",
+        )
+
+    # Weak: Support far from volume clusters (more than 3% below VAL)
+    if val is not None and support_level < val * 0.97:
+        return (
+            "WEAK",
+            f"{level_name} ${support_level:,.2f} well below Value Area Low ${val:,.2f}",
+        )
+
+    # Support near but above Value Area (within 3% above VAH)
+    if vah is not None and vah < support_level <= vah * 1.03:
+        return (
+            "MODERATE",
+            f"{level_name} ${support_level:,.2f} near but above Value Area High ${vah:,.2f}",
+        )
+
+    # Support far above Value Area (more than 3% above VAH)
+    if vah is not None and support_level > vah * 1.03:
+        return (
+            "MODERATE",
+            f"{level_name} ${support_level:,.2f} well above Value Area High ${vah:,.2f} - lower volume backing",
+        )
+
+    # Default: outside value area but not near any volume cluster
+    return "MODERATE", f"{level_name} ${support_level:,.2f} has moderate volume backing"
+
+
+def assess_buy_quality(
+    d50,
+    d100,
+    d200,
+    s1,
+    current_price,
+    poc=None,
+    vah=None,
+    val=None,
+    hvn_below=None,
+    level_name="S1",
+):
+    """
+    Assess buy quality based on MA positioning + VRVP volume backing.
     Returns: (quality_rating, quality_note)
 
-    EXCELLENT: All MAs below S1 (clear path to support)
-    GOOD: D100 and D200 below S1 (strong long-term support)
-    OK: Partial support but missing D100 & D200 combination (less reliable)
-    CAUTION: No MAs below S1 (resistance blocking support)
-    EXTENDED: Price > 10% above all MAs (too high to buy)
+    EXCELLENT: All MAs below support + support has strong volume backing
+    GOOD: D100 & D200 below support + support has strong/moderate volume backing
+    OK: Partial MA support or good MA with only moderate volume backing
+    CAUTION: No MA support or support in weak volume zone
+    EXTENDED: Price >10% above all MAs or VAH
     """
     if s1 is None:
-        return "N/A", "No S1 support level available"
+        return "N/A", f"No {level_name} support level available"
 
-    # Check for extended condition (price way above all MAs)
+    # Step 1: Check for EXTENDED conditions
     mas_valid = [ma for ma in [d50, d100, d200] if ma is not None]
+
+    # Extended above MAs
     if mas_valid and all(current_price > ma * 1.10 for ma in mas_valid):
         return "EXTENDED", "Price >10% above all MAs - wait for pullback"
 
-    # Count MAs below S1
-    mas_below_s1 = 0
-    mas_checked = 0
+    # Extended above Value Area High
+    if vah is not None and current_price > vah * 1.10:
+        return (
+            "EXTENDED",
+            f"Price ${current_price:,.2f} >10% above VAH ${vah:,.2f} - wait for pullback",
+        )
 
-    for ma in [d50, d100, d200]:
-        if ma is not None:
-            mas_checked += 1
-            if ma <= s1:
-                mas_below_s1 += 1
+    # Step 2: Assess S1 volume backing
+    volume_quality, volume_note = assess_support_volume_backing(
+        s1, poc, vah, val, hvn_below, level_name
+    )
+
+    # Step 3: Identify which MAs are below support level
+    mas_below_s1 = []
+    ma_names = ["D50", "D100", "D200"]
+    ma_values = [d50, d100, d200]
+
+    for ma_name, ma_value in zip(ma_names, ma_values):
+        if ma_value is not None and ma_value <= s1:
+            mas_below_s1.append(ma_name)
+
+    mas_checked = sum(1 for ma in ma_values if ma is not None)
 
     if mas_checked == 0:
         return "N/A", "Insufficient MA data"
 
-    # Rate quality
-    if mas_below_s1 == 3:
-        return "EXCELLENT", "D50, D100, D200 all support S1"
-    elif d100 is not None and d200 is not None and d100 <= s1 and d200 <= s1:
-        return "GOOD", "D100 & D200 support S1"
-    elif mas_below_s1 >= 1:
-        return "OK", f"{mas_below_s1} of {mas_checked} MAs support S1"
-    else:
-        return "CAUTION", "MAs above S1 - resistance blocking support"
+    # Format MA list for messages
+    ma_list_str = ", ".join(mas_below_s1) if mas_below_s1 else "No MAs"
+
+    # Step 4: Combine MA position + Volume backing (following simplified logic tree)
+
+    # All MAs below support level?
+    if len(mas_below_s1) == 3:
+        # Is support near POC/HVN?
+        if volume_quality == "STRONG":
+            return "EXCELLENT", f"{ma_list_str} support {level_name} + {volume_note}"
+        # Is support in Value Area?
+        elif volume_quality == "MODERATE":
+            return "GOOD", f"{ma_list_str} support {level_name} + {volume_note}"
+        else:
+            return "OK", f"{ma_list_str} support {level_name} but {volume_note}"
+
+    # D100 & D200 below support level?
+    if "D100" in mas_below_s1 and "D200" in mas_below_s1:
+        # Support volume quality?
+        if volume_quality in ["STRONG", "MODERATE"]:
+            return "GOOD", f"D100, D200 support {level_name} + {volume_note}"
+        else:  # Weak
+            return "OK", f"D100, D200 support {level_name} but {volume_note}"
+
+    # Some MA support?
+    if len(mas_below_s1) >= 1:
+        # Support volume quality?
+        if volume_quality == "WEAK":
+            return (
+                "CAUTION",
+                f"{ma_list_str} support {level_name} but {volume_note}",
+            )
+        else:
+            return (
+                "OK",
+                f"{ma_list_str} support {level_name}, {volume_note}",
+            )
+
+    # No MA support + weak support
+    return "CAUTION", f"No MA support + {volume_note}"
+
+
+def assess_resistance_volume_backing(
+    resistance_level, poc, vah, val, hvn_above, level_name="R1"
+):
+    """
+    Assess volume backing for resistance level using VRVP data.
+    Returns: ('STRONG', 'MODERATE', 'WEAK', note)
+
+    High volume at resistance = strong ceiling (good for selling)
+    """
+    if resistance_level is None:
+        return "WEAK", f"No {level_name} available"
+
+    # Strong: Resistance aligns with POC or HVN (±3% tolerance) - strong ceiling
+    if poc is not None and abs(resistance_level - poc) / poc <= 0.03:
+        return (
+            "STRONG",
+            f"{level_name} ${resistance_level:,.2f} aligns with POC ${poc:,.2f} - strong ceiling",
+        )
+
+    if hvn_above is not None and abs(resistance_level - hvn_above) / hvn_above <= 0.03:
+        return (
+            "STRONG",
+            f"{level_name} ${resistance_level:,.2f} aligns with HVN ${hvn_above:,.2f} - strong ceiling",
+        )
+
+    # Moderate: Resistance within Value Area
+    if val is not None and vah is not None:
+        if val <= resistance_level <= vah:
+            return (
+                "MODERATE",
+                f"{level_name} ${resistance_level:,.2f} in Value Area (${val:,.2f}-${vah:,.2f})",
+            )
+
+    # Resistance near but above Value Area (within 3% above VAH)
+    if vah is not None and vah < resistance_level <= vah * 1.03:
+        return (
+            "MODERATE",
+            f"{level_name} ${resistance_level:,.2f} near but above Value Area High ${vah:,.2f}",
+        )
+
+    # Resistance far above Value Area (more than 3% above VAH) - untested zone
+    if vah is not None and resistance_level > vah * 1.03:
+        return (
+            "WEAK",
+            f"{level_name} ${resistance_level:,.2f} well above Value Area High ${vah:,.2f} - untested zone",
+        )
+
+    # Resistance near but below Value Area (within 3% below VAH)
+    if vah is not None and vah * 0.97 <= resistance_level < vah:
+        return (
+            "MODERATE",
+            f"{level_name} ${resistance_level:,.2f} near but below Value Area High ${vah:,.2f}",
+        )
+
+    # Weak: Resistance well below VAH (in low volume zone)
+    if vah is not None and resistance_level < vah * 0.97:
+        return (
+            "WEAK",
+            f"{level_name} ${resistance_level:,.2f} well below Value Area High ${vah:,.2f}",
+        )
+
+    # Default
+    return (
+        "MODERATE",
+        f"{level_name} ${resistance_level:,.2f} has moderate volume resistance",
+    )
+
+
+def assess_sell_quality(
+    d50,
+    d100,
+    d200,
+    r1,
+    current_price,
+    poc=None,
+    vah=None,
+    val=None,
+    hvn_above=None,
+    level_name="R1",
+):
+    """
+    Assess sell quality based on MA positioning + VRVP volume resistance.
+    Returns: (quality_rating, quality_note)
+
+    EXCELLENT: All MAs above resistance + resistance has strong volume (strong ceiling)
+    GOOD: D100 & D200 above resistance + resistance has strong/moderate volume
+    OK: Partial MA resistance or good MA with only moderate volume
+    CAUTION: No MA resistance or resistance in weak volume zone
+    MISSED: Price already above resistance level
+    """
+    if r1 is None:
+        return "N/A", f"No {level_name} resistance level available"
+
+    # Step 1: Check if already above resistance
+    if current_price >= r1:
+        return (
+            "MISSED",
+            f"Price ${current_price:.2f} already above {level_name} ${r1:.2f}",
+        )
+
+    # Step 2: Assess resistance volume backing
+    volume_quality, volume_note = assess_resistance_volume_backing(
+        r1, poc, vah, val, hvn_above, level_name
+    )
+
+    # Step 3: Identify which MAs are ABOVE resistance (blocking upside)
+    mas_above_r = []
+    ma_names = ["D50", "D100", "D200"]
+    ma_values = [d50, d100, d200]
+
+    for ma_name, ma_value in zip(ma_names, ma_values):
+        if ma_value is not None and ma_value >= r1:
+            mas_above_r.append(ma_name)
+
+    mas_checked = sum(1 for ma in ma_values if ma is not None)
+
+    if mas_checked == 0:
+        return "N/A", "Insufficient MA data"
+
+    # Format MA list for messages
+    ma_list_str = ", ".join(mas_above_r) if mas_above_r else "No MAs"
+
+    # Step 4: Combine MA resistance + Volume backing
+
+    # All MAs above resistance (strong ceiling)
+    if len(mas_above_r) == 3:
+        if volume_quality == "STRONG":
+            return "EXCELLENT", f"{ma_list_str} block {level_name} + {volume_note}"
+        elif volume_quality == "MODERATE":
+            return "GOOD", f"{ma_list_str} block {level_name} + {volume_note}"
+        else:
+            return "OK", f"{ma_list_str} block {level_name} but {volume_note}"
+
+    # D100 & D200 above resistance
+    if "D100" in mas_above_r and "D200" in mas_above_r:
+        if volume_quality in ["STRONG", "MODERATE"]:
+            return "GOOD", f"D100, D200 block {level_name} + {volume_note}"
+        else:
+            return "OK", f"D100, D200 block {level_name} but {volume_note}"
+
+    # Some MA resistance
+    if len(mas_above_r) >= 1:
+        if volume_quality == "WEAK":
+            return "CAUTION", f"{ma_list_str} block {level_name} but {volume_note}"
+        else:
+            return "OK", f"{ma_list_str} block {level_name}, {volume_note}"
+
+    # No MA resistance - might break through easily
+    return "CAUTION", f"No MA resistance above {level_name} + {volume_note}"
 
 
 def adjust_sell_levels_for_mas(d50, d100, d200, r1, r2, r3, current_price):
@@ -564,7 +1048,7 @@ def adjust_sell_levels_for_mas(d50, d100, d200, r1, r2, r3, current_price):
         if blocking_mas:
             # Suggest lowest blocking MA as alternate sell level
             lowest_ma, ma_name = min(blocking_mas, key=lambda x: x[0])
-            notes.append(f"{r_name} blocked by {ma_name} ${lowest_ma:.2f}")
+            notes.append(f"{r_name} blocked by {ma_name} ${lowest_ma:,.2f}")
 
             # Adjust level to MA
             if r_name == "R1":
@@ -625,14 +1109,54 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             daily["Close"].rolling(200).mean().iloc[-1] if len(daily) >= 200 else None
         )
 
-        # Pivots
-        daily_highs, daily_lows = detect_swings(daily)
-        daily_supports, daily_resistances = select_top_sr(
-            daily_highs, daily_lows, current_price
+        # Volume Profile (VRVP)
+        vp_60d = calculate_volume_profile(daily, price_bins=60)
+        vp_52w = calculate_volume_profile(weekly, price_bins=52)
+
+        poc_60d = vp_60d["poc"] if vp_60d else None
+        vah_60d = vp_60d["vah"] if vp_60d else None
+        val_60d = vp_60d["val"] if vp_60d else None
+
+        poc_52w = vp_52w["poc"] if vp_52w else None
+        vah_52w = vp_52w["vah"] if vp_52w else None
+        val_52w = vp_52w["val"] if vp_52w else None
+
+        # Find nearest HVN/LVN levels for trading
+        hvn_above_60d, hvn_below_60d, lvn_above_60d, lvn_below_60d = (
+            None,
+            None,
+            None,
+            None,
         )
-        weekly_highs, weekly_lows = detect_swings(weekly)
+        if vp_60d:
+            hvn_above_60d, hvn_below_60d, lvn_above_60d, lvn_below_60d = (
+                find_nearest_hvn_lvn(
+                    current_price, vp_60d["hvn_levels"], vp_60d["lvn_levels"]
+                )
+            )
+
+        # Pivots - use lower strength for resistance detection (6 vs 12 for more recent levels)
+        daily_highs, daily_lows = detect_swings(
+            daily, strength=12, strength_resistance=6
+        )
+        daily_supports, daily_resistances = select_top_sr(
+            daily_highs,
+            daily_lows,
+            current_price,
+            poc=poc_60d,
+            hvn_above=hvn_above_60d,
+            max_resistance_pct=30,
+        )
+        weekly_highs, weekly_lows = detect_swings(
+            weekly, strength=12, strength_resistance=6
+        )
         weekly_supports, weekly_resistances = select_top_sr(
-            weekly_highs, weekly_lows, current_price
+            weekly_highs,
+            weekly_lows,
+            current_price,
+            poc=poc_52w,
+            hvn_above=None,
+            max_resistance_pct=30,
         )
 
         # Signal
@@ -659,9 +1183,80 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
         r2 = float(daily_resistances[1]) if not pd.isna(daily_resistances[1]) else None
         r3 = float(daily_resistances[2]) if not pd.isna(daily_resistances[2]) else None
 
-        # Assess buy quality (MA confluence with S1)
-        buy_quality, buy_quality_note = assess_buy_quality(
-            d50, d100, d200, s1, current_price
+        # Assess buy quality for each support level (MA confluence + VRVP volume backing)
+        s1_quality = assess_buy_quality(
+            d50,
+            d100,
+            d200,
+            s1,
+            current_price,
+            poc=poc_60d,
+            vah=vah_60d,
+            val=val_60d,
+            hvn_below=hvn_below_60d,
+            level_name="S1",
+        )
+        s2_quality = assess_buy_quality(
+            d50,
+            d100,
+            d200,
+            s2,
+            current_price,
+            poc=poc_60d,
+            vah=vah_60d,
+            val=val_60d,
+            hvn_below=hvn_below_60d,
+            level_name="S2",
+        )
+        s3_quality = assess_buy_quality(
+            d50,
+            d100,
+            d200,
+            s3,
+            current_price,
+            poc=poc_60d,
+            vah=vah_60d,
+            val=val_60d,
+            hvn_below=hvn_below_60d,
+            level_name="S3",
+        )
+
+        # Assess sell quality for each resistance level (MA resistance + VRVP volume ceiling)
+        r1_quality = assess_sell_quality(
+            d50,
+            d100,
+            d200,
+            r1,
+            current_price,
+            poc=poc_60d,
+            vah=vah_60d,
+            val=val_60d,
+            hvn_above=hvn_above_60d,
+            level_name="R1",
+        )
+        r2_quality = assess_sell_quality(
+            d50,
+            d100,
+            d200,
+            r2,
+            current_price,
+            poc=poc_60d,
+            vah=vah_60d,
+            val=val_60d,
+            hvn_above=hvn_above_60d,
+            level_name="R2",
+        )
+        r3_quality = assess_sell_quality(
+            d50,
+            d100,
+            d200,
+            r3,
+            current_price,
+            poc=poc_60d,
+            vah=vah_60d,
+            val=val_60d,
+            hvn_above=hvn_above_60d,
+            level_name="R3",
         )
 
         # Adjust sell levels for MA resistance
@@ -686,9 +1281,34 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             "d50": float(d50) if d50 is not None and not pd.isna(d50) else None,
             "d100": float(d100) if d100 is not None and not pd.isna(d100) else None,
             "d200": float(d200) if d200 is not None and not pd.isna(d200) else None,
-            # Buy quality assessment
-            "buy_quality": buy_quality,
-            "buy_quality_note": buy_quality_note,
+            # Volume Profile - 60 day
+            "poc_60d": float(poc_60d) if poc_60d is not None else None,
+            "vah_60d": float(vah_60d) if vah_60d is not None else None,
+            "val_60d": float(val_60d) if val_60d is not None else None,
+            "hvn_above_60d": float(hvn_above_60d) if hvn_above_60d else None,
+            "hvn_below_60d": float(hvn_below_60d) if hvn_below_60d else None,
+            "lvn_above_60d": float(lvn_above_60d) if lvn_above_60d else None,
+            "lvn_below_60d": float(lvn_below_60d) if lvn_below_60d else None,
+            # Volume Profile - 52 week
+            "poc_52w": float(poc_52w) if poc_52w is not None else None,
+            "vah_52w": float(vah_52w) if vah_52w is not None else None,
+            "val_52w": float(val_52w) if val_52w is not None else None,
+            # Buy quality assessment (per support level)
+            "buy_quality": s1_quality[0],  # Overall based on S1 (nearest level)
+            "buy_quality_note": s1_quality[1],
+            "s1_quality": s1_quality[0],
+            "s1_quality_note": s1_quality[1],
+            "s2_quality": s2_quality[0],
+            "s2_quality_note": s2_quality[1],
+            "s3_quality": s3_quality[0],
+            "s3_quality_note": s3_quality[1],
+            # Sell quality assessment (per resistance level)
+            "r1_quality": r1_quality[0],
+            "r1_quality_note": r1_quality[1],
+            "r2_quality": r2_quality[0],
+            "r2_quality_note": r2_quality[1],
+            "r3_quality": r3_quality[0],
+            "r3_quality_note": r3_quality[1],
             # Adjusted sell levels (MA-aware)
             "adjusted_r1": float(adjusted_r1) if adjusted_r1 is not None else r1,
             "adjusted_r2": float(adjusted_r2) if adjusted_r2 is not None else r2,

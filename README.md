@@ -101,7 +101,12 @@ Three-tranche approach based on confluence:
 ### Technical Indicators
 
 - **Moving Averages**: D20/D50/D100/D200 (daily), W10/W20/W200 (weekly)
-- **Volume Profile**: POC, VAH/VAL (60-day, 52-week)
+- **Volume Profile (VRVP)**: 
+  - **POC (Point of Control)**: Price with highest volume - strong S/R level
+  - **VAH/VAL (Value Area)**: 70% volume range - fair value zone
+  - **HVN (High Volume Nodes)**: Volume clusters - support/resistance
+  - **LVN (Low Volume Nodes)**: Low volume zones - breakout/breakdown areas
+  - **Timeframes**: 60-day and 52-week analysis
 - **Pivot Points**: S1/S2/S3, R1/R2/R3 (daily & weekly)
 - **Confluence Ratings**: EXTENDED (>10% above D100), BALANCED (±10%), WEAK (<10% below)
 

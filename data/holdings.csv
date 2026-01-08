@@ -1,10 +1,6 @@
 ticker,quantity,avg_cost,last_updated,min_quantity
 TSLA,72,310.60,2026-01-04,0
 NVDA,0,0.00,,0
-MSFT,0,0.00,,0
-META,0,0.00,,0
-PLTR,0,0.00,,0
-MSTR,0,0.00,,0
 ASML,0,0.00,,0
 AMD,0,0.00,,0
 AVGO,0,0.00,,0
