@@ -803,13 +803,13 @@ def assess_buy_quality(
 
     # Extended above MAs
     if mas_valid and all(current_price > ma * 1.10 for ma in mas_valid):
-        return "EXTENDED", "Price >10% above all MAs - wait for pullback"
+        return "EXTENDED", "Price over 10% above all MAs - wait for pullback"
 
     # Extended above Value Area High
     if vah is not None and current_price > vah * 1.10:
         return (
             "EXTENDED",
-            f"Price ${current_price:,.2f} >10% above VAH ${vah:,.2f} - wait for pullback",
+            f"Price ${current_price:,.2f} over 10% above VAH ${vah:,.2f} - wait for pullback",
         )
 
     # Step 2: Assess S1 volume backing
