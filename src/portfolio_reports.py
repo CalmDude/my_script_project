@@ -160,22 +160,6 @@ def create_trading_playbook_pdf(portfolio_data, output_path, timestamp_str):
             elements.append(Paragraph(alloc_text, styles["Normal"]))
             elements.append(Spacer(1, 0.05 * inch))
 
-            # Buy Quality for each support level
-            s1_quality = pos.get("s1_quality", "N/A")
-            s1_quality_note = pos.get("s1_quality_note", "")
-            s2_quality = pos.get("s2_quality", "N/A")
-            s2_quality_note = pos.get("s2_quality_note", "")
-            s3_quality = pos.get("s3_quality", "N/A")
-            s3_quality_note = pos.get("s3_quality_note", "")
-
-            quality_text = f"""
-            <b>Buy Quality S1:</b> {s1_quality} - {s1_quality_note}<br/>
-            <b>Buy Quality S2:</b> {s2_quality} - {s2_quality_note}<br/>
-            <b>Buy Quality S3:</b> {s3_quality} - {s3_quality_note}
-            """
-            elements.append(Paragraph(quality_text, styles["Normal"]))
-            elements.append(Spacer(1, 0.05 * inch))
-
             # Buy tranches (simplified - no quality notes repeated)
             tranches = pos.get("buy_tranches", [])
             if tranches:
@@ -215,6 +199,22 @@ def create_trading_playbook_pdf(portfolio_data, output_path, timestamp_str):
                             tranche_text = f"- {status}"
                     elements.append(Paragraph(tranche_text, styles["Normal"]))
 
+            elements.append(Spacer(1, 0.05 * inch))
+
+            # Buy Quality for each support level
+            s1_quality = pos.get("s1_quality", "N/A")
+            s1_quality_note = pos.get("s1_quality_note", "")
+            s2_quality = pos.get("s2_quality", "N/A")
+            s2_quality_note = pos.get("s2_quality_note", "")
+            s3_quality = pos.get("s3_quality", "N/A")
+            s3_quality_note = pos.get("s3_quality_note", "")
+
+            quality_text = f"""
+            <b>Buy Quality S1:</b> {s1_quality} - {s1_quality_note}<br/>
+            <b>Buy Quality S2:</b> {s2_quality} - {s2_quality_note}<br/>
+            <b>Buy Quality S3:</b> {s3_quality} - {s3_quality_note}
+            """
+            elements.append(Paragraph(quality_text, styles["Normal"]))
             elements.append(Spacer(1, 0.05 * inch))
 
             # Volume Profile at the end
@@ -264,22 +264,6 @@ def create_trading_playbook_pdf(portfolio_data, output_path, timestamp_str):
             elements.append(Paragraph(alloc_text, styles["Normal"]))
             elements.append(Spacer(1, 0.05 * inch))
 
-            # Sell Quality for each resistance level
-            r1_quality = pos.get("r1_quality", "N/A")
-            r1_quality_note = pos.get("r1_quality_note", "")
-            r2_quality = pos.get("r2_quality", "N/A")
-            r2_quality_note = pos.get("r2_quality_note", "")
-            r3_quality = pos.get("r3_quality", "N/A")
-            r3_quality_note = pos.get("r3_quality_note", "")
-
-            quality_text = f"""
-            <b>Sell Quality R1:</b> {r1_quality} - {r1_quality_note}<br/>
-            <b>Sell Quality R2:</b> {r2_quality} - {r2_quality_note}<br/>
-            <b>Sell Quality R3:</b> {r3_quality} - {r3_quality_note}
-            """
-            elements.append(Paragraph(quality_text, styles["Normal"]))
-            elements.append(Spacer(1, 0.05 * inch))
-
             # Show MA feasibility note before reduction plan to explain adjusted levels
             sell_note = pos.get("sell_feasibility_note", "")
             if sell_note and sell_note != "Clear path to all R-levels":
@@ -323,6 +307,22 @@ def create_trading_playbook_pdf(portfolio_data, output_path, timestamp_str):
                 summary_text = f"<b>Result:</b> Reduce ${total_reduction:,.0f}, Keep ${keep_amount:,.0f}"
                 elements.append(Paragraph(summary_text, styles["Normal"]))
 
+            elements.append(Spacer(1, 0.05 * inch))
+
+            # Sell Quality for each resistance level
+            r1_quality = pos.get("r1_quality", "N/A")
+            r1_quality_note = pos.get("r1_quality_note", "")
+            r2_quality = pos.get("r2_quality", "N/A")
+            r2_quality_note = pos.get("r2_quality_note", "")
+            r3_quality = pos.get("r3_quality", "N/A")
+            r3_quality_note = pos.get("r3_quality_note", "")
+
+            quality_text = f"""
+            <b>Sell Quality R1:</b> {r1_quality} - {r1_quality_note}<br/>
+            <b>Sell Quality R2:</b> {r2_quality} - {r2_quality_note}<br/>
+            <b>Sell Quality R3:</b> {r3_quality} - {r3_quality_note}
+            """
+            elements.append(Paragraph(quality_text, styles["Normal"]))
             elements.append(Spacer(1, 0.05 * inch))
 
             # Volume Profile at the end
