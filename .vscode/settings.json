@@ -18,5 +18,6 @@
         "portfolio_results": false,
         "ci_logs": true,
         "results": true
-    }
+    },
+    "window.restoreWindows": "all"
 }
