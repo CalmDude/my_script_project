@@ -11,7 +11,7 @@ Write-Host ""
 
 # Check if git is clean
 Write-Host "Checking git status..." -ForegroundColor Yellow
-cd C:\workspace\portfolio_analyser
+Set-Location C:\workspace\portfolio_analyser
 $gitStatus = git status --porcelain
 
 if ($gitStatus) {
