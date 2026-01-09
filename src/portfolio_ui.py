@@ -104,7 +104,7 @@ with tab1:
 
     st.markdown("---")
 
-    if st.button("➕ Add Transaction", type="primary", use_container_width=True):
+    if st.button("➕ Add Transaction", type="primary", width="stretch"):
         if not ticker:
             st.error("⚠️ Please enter a ticker symbol")
         elif quantity <= 0:
@@ -410,7 +410,7 @@ with tab4:
                 }
             )
 
-            st.dataframe(styled_detail, use_container_width=True, hide_index=True)
+            st.dataframe(styled_detail, width="stretch", hide_index=True)
 
         else:
             st.info("📭 No positions to display")
