@@ -1,0 +1,5 @@
+date,ticker,signal,trigger_price,buy_quality,return_30d,return_60d,return_90d,price_30d,price_60d,price_90d
+2026-01-09,TSLA,FULL HOLD + ADD,435.8,EXTENDED,,,,,,
+2026-01-09,NVDA,FULL HOLD + ADD,185.04,EXTENDED,,,,,,
+2026-01-09,ASML,FULL HOLD + ADD,1194.32,EXTENDED,,,,,,
+2026-01-09,MRVL,FULL HOLD + ADD,83.45,OK,,,,,,
