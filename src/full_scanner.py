@@ -10,6 +10,10 @@ from technical_analysis import analyze_ticker
 from datetime import datetime
 import yfinance as yf
 from pathlib import Path
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -688,8 +692,14 @@ def create_portfolio_excel(all_df, output_file, category="Portfolio"):
                         try:
                             if len(str(cell.value)) > max_length:
                                 max_length = len(str(cell.value))
-                        except:
-                            pass
+                        except (AttributeError, TypeError) as e:
+                            logger.debug(
+                                f"Skipping cell value for width calculation: {e}"
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Unexpected error calculating column width: {e}"
+                            )
                     adjusted_width = min(max_length + 2, 50)
                     worksheet.column_dimensions[column_letter].width = adjusted_width
 

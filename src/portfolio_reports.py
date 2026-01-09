@@ -6,8 +6,12 @@ Creates Trading Playbook PDF and Portfolio Tracker Excel
 from pathlib import Path
 from datetime import datetime
 import pandas as pd
+import logging
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
+
+# Configure logging
+logger = logging.getLogger(__name__)
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import (
@@ -745,6 +749,9 @@ def cleanup_old_reports(results_dir, max_files=3, archive_retention_days=90):
                 archive_file.unlink()
                 deleted_count += 1
             except Exception as e:
+                logger.warning(
+                    f"Could not delete archive file {archive_file.name}: {e}"
+                )
                 print(f"  ⚠️  Could not delete {archive_file.name}: {e}")
 
     if deleted_count > 0:

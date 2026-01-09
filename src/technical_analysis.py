@@ -8,6 +8,10 @@ import random
 import json
 from pathlib import Path
 import hashlib
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # CACHING SYSTEM - Prevents rate limiting by caching results for 24 hours
@@ -47,7 +51,11 @@ def _load_from_cache(ticker, daily_bars, weekly_bars):
             return None
 
         return cached["data"]
-    except:
+    except (IOError, json.JSONDecodeError, KeyError) as e:
+        logger.warning(f"Cache read failed for {ticker}: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected cache read error for {ticker}: {e}")
         return None
 
 
@@ -59,8 +67,10 @@ def _save_to_cache(ticker, daily_bars, weekly_bars, data):
         cached = {"cached_at": datetime.now().isoformat(), "data": data}
         with open(cache_path, "w") as f:
             json.dump(cached, f)
-    except:
-        pass  # Silently fail if caching doesn't work
+    except (IOError, OSError) as e:
+        logger.warning(f"Cache write failed for {ticker}: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected cache write error for {ticker}: {e}")
 
 
 def _smart_delay():
@@ -434,9 +444,12 @@ def analyze_basket(basket_name, constituent_tickers, daily_bars=60, weekly_bars=
                             {"result": result, "market_cap": market_cap}
                         )
                         constituent_signals.append(f"{ticker} {result['signal']}")
-                except:
-                    # If can't get market cap, skip this constituent
-                    pass
+                except (KeyError, ValueError, TypeError) as e:
+                    logger.warning(
+                        f"Failed to get market cap for {ticker} in basket: {e}"
+                    )
+                except Exception as e:
+                    logger.error(f"Unexpected error processing {ticker} in basket: {e}")
 
         if not constituent_data:
             return {
