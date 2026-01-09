@@ -42,8 +42,8 @@ Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Start Streamlit
-& ".venv\Scripts\python.exe" -m streamlit run src\portfolio_ui.py
+# Start Streamlit (without auto-opening browser)
+& ".venv\Scripts\python.exe" -m streamlit run src\portfolio_ui.py --server.headless true
 
 Write-Host ""
 Write-Host "UI has been stopped." -ForegroundColor Yellow

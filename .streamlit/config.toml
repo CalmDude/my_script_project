@@ -1,0 +1,7 @@
+[server]
+# Prevent Streamlit from automatically opening browser
+headless = true
+
+[browser]
+# Don't gather usage stats
+gatherUsageStats = false
