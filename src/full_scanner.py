@@ -1,4 +1,4 @@
-﻿"""
+"""
 S&P 500 Scanner - Find stocks with FULL HOLD + ADD signal
 Scans all S&P 500 stocks for strongest bullish alignment (weekly P1 + daily P1)
 Only outputs stocks with "FULL HOLD + ADD" signal
@@ -28,6 +28,18 @@ from reportlab.platypus import (
     KeepTogether,
 )
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+
+def get_score_grade(score):
+    """Convert numeric score to letter grade"""
+    if score >= 70:
+        return "A"
+    elif score >= 50:
+        return "B"
+    elif score >= 30:
+        return "C"
+    else:
+        return "D"
 
 
 def get_sp500_tickers():
@@ -287,11 +299,12 @@ def scan_stocks(
                     if signal == "FULL HOLD + ADD":
                         price = result.get("current_price", 0)
                         buy_quality = result.get("buy_quality", "N/A")
-                        quality_indicator = (
-                            "✓" if buy_quality in ["EXCELLENT", "GOOD", "OK"] else "⚠"
-                        )
+                        entry_quality = result.get("entry_quality", buy_quality)
+                        entry_flag = result.get("entry_flag", "")
+
+                        # Show entry quality (stop-aware) instead of just buy quality
                         print(
-                            f"[OK] [{completed}/{total}] {ticker:6s} -> {signal:20s} ${price:,.2f} | Quality: {buy_quality:10s} {quality_indicator}"
+                            f"[OK] [{completed}/{total}] {ticker:6s} -> {signal:20s} ${price:,.2f} | Entry: {entry_quality:10s} {entry_flag}"
                         )
                         buy_signals.append(result)
                     elif completed % 50 == 0:  # Progress update
@@ -333,7 +346,9 @@ def scan_stocks(
     return df
 
 
-def filter_buy_signals(df, signal="FULL HOLD + ADD", quality_filter=True):
+def filter_buy_signals(
+    df, signal="FULL HOLD + ADD", quality_filter=True, use_entry_quality=True
+):
     """
     Filter for FULL HOLD + ADD signals (strongest bullish alignment)
 
@@ -341,6 +356,7 @@ def filter_buy_signals(df, signal="FULL HOLD + ADD", quality_filter=True):
         df: DataFrame with scan results
         signal: Signal to filter for (default: 'FULL HOLD + ADD')
         quality_filter: If True, only include EXCELLENT/GOOD/OK quality (exclude EXTENDED/WEAK)
+        use_entry_quality: If True, use entry_quality (stop-aware) instead of buy_quality
 
     Returns:
         Filtered DataFrame sorted by ticker
@@ -351,9 +367,17 @@ def filter_buy_signals(df, signal="FULL HOLD + ADD", quality_filter=True):
     # Filter by signal
     filtered = df[df["signal"] == signal].copy()
 
-    # Optionally filter by buy quality
-    if quality_filter and "buy_quality" in filtered.columns:
-        filtered = filtered[filtered["buy_quality"].isin(["EXCELLENT", "GOOD", "OK"])]
+    # Optionally filter by quality
+    if quality_filter:
+        # Use entry_quality (stop-aware) if available, otherwise fall back to buy_quality
+        if use_entry_quality and "entry_quality" in filtered.columns:
+            filtered = filtered[
+                filtered["entry_quality"].isin(["EXCELLENT", "GOOD", "OK"])
+            ]
+        elif "buy_quality" in filtered.columns:
+            filtered = filtered[
+                filtered["buy_quality"].isin(["EXCELLENT", "GOOD", "OK"])
+            ]
 
     return filtered.sort_values("ticker")
 
@@ -411,40 +435,58 @@ def cleanup_old_scans(results_dir, max_files=1, archive_retention_days=60):
 
     # Define categories and their file patterns
     categories = [
-        ("sp500", "sp500_analysis_*.xlsx", "scanner_report_sp500_*.pdf"),
-        ("nasdaq100", "nasdaq100_analysis_*.xlsx", "scanner_report_nasdaq100_*.pdf"),
-        ("portfolio", "portfolio_scanner_*.xlsx", "scanner_report_portfolio_*.pdf"),
+        (
+            "sp500",
+            "sp500_analysis_*.xlsx",
+            "scanner_report_sp500_*.pdf",
+            "sp500_best_trades_*.xlsx",
+            "sp500_best_trades_*.pdf",
+        ),
+        (
+            "nasdaq100",
+            "nasdaq100_analysis_*.xlsx",
+            "scanner_report_nasdaq100_*.pdf",
+            "nasdaq100_best_trades_*.xlsx",
+            "nasdaq100_best_trades_*.pdf",
+        ),
+        (
+            "portfolio",
+            "portfolio_scanner_*.xlsx",
+            "scanner_report_portfolio_*.pdf",
+            "portfolio_best_trades_*.xlsx",
+            "portfolio_best_trades_*.pdf",
+        ),
     ]
 
     # Process each category separately
-    for cat_name, xlsx_pattern, pdf_pattern in categories:
-        # Get files for this category
-        xlsx_files = sorted(
-            results_dir.glob(xlsx_pattern),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        pdf_files = sorted(
-            results_dir.glob(pdf_pattern), key=lambda p: p.stat().st_mtime, reverse=True
-        )
+    for category_info in categories:
+        cat_name = category_info[0]
+        patterns = category_info[1:]
 
-        # Move files beyond max_files to archive
-        for old_file in xlsx_files[max_files:]:
-            archive_path = archive_dir / old_file.name
-            old_file.rename(archive_path)
-            print(f"  ðŸ“¦ Archived ({cat_name}): {old_file.name}")
-            total_archived += 1
+        # Create category subfolder and archive subfolder
+        cat_dir = results_dir / cat_name
+        cat_archive_dir = archive_dir / cat_name
+        cat_archive_dir.mkdir(parents=True, exist_ok=True)
 
-        for old_file in pdf_files[max_files:]:
-            archive_path = archive_dir / old_file.name
-            old_file.rename(archive_path)
-            print(f"  ðŸ“¦ Archived ({cat_name}): {old_file.name}")
-            total_archived += 1
+        # Get all files for this category
+        for pattern in patterns:
+            files = sorted(
+                cat_dir.glob(pattern),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+
+            # Move files beyond max_files to archive
+            for old_file in files[max_files:]:
+                archive_path = cat_archive_dir / old_file.name
+                old_file.rename(archive_path)
+                print(f"  📦 Archived ({cat_name}): {old_file.name}")
+                total_archived += 1
 
     if total_archived > 0:
-        print(f"  âœ… Archived {total_archived} file(s), kept {max_files} most recent")
+        print(f"  ✅ Archived {total_archived} file(s), kept {max_files} most recent")
     else:
-        print(f"  âœ… No files to archive (only {max_files} most recent exist)")
+        print(f"  ✅ No files to archive (only {max_files} most recent exist)")
 
     # Delete archive files older than retention period
     cutoff_time = time.time() - (
@@ -452,18 +494,523 @@ def cleanup_old_scans(results_dir, max_files=1, archive_retention_days=60):
     )  # 86400 seconds per day
     deleted_count = 0
 
-    for archive_file in archive_dir.glob("*"):
-        if archive_file.is_file() and archive_file.stat().st_mtime < cutoff_time:
-            try:
-                archive_file.unlink()
-                deleted_count += 1
-            except Exception as e:
-                print(f"  âš ï¸  Could not delete {archive_file.name}: {e}")
+    # Check all category subfolders in archive
+    for cat_archive_dir in archive_dir.glob("*/"):
+        if cat_archive_dir.is_dir():
+            for archive_file in cat_archive_dir.glob("*"):
+                if (
+                    archive_file.is_file()
+                    and archive_file.stat().st_mtime < cutoff_time
+                ):
+                    try:
+                        archive_file.unlink()
+                        deleted_count += 1
+                    except Exception as e:
+                        print(f"  ⚠️  Could not delete {archive_file.name}: {e}")
 
     if deleted_count > 0:
         print(
-            f"  ðŸ—‘ï¸  Deleted {deleted_count} archive file(s) older than {archive_retention_days} days"
+            f"  🗑️  Deleted {deleted_count} archive file(s) older than {archive_retention_days} days"
         )
+
+
+def calculate_buy_score(row):
+    """
+    Calculate trading score for buy opportunities (0-100)
+
+    Scoring factors:
+    - Entry Quality (25pts): EXCELLENT=25, GOOD=18, OK=12 (uses stop-aware quality)
+    - Distance to S1 (15pts): <2%=15, 2-5%=11, 5-10%=7
+    - Upside to R1 (20pts): >15%=20, 10-15%=16, 5-10%=12, 2-5%=8
+    - Risk/Reward (20pts): >3:1=20, 2-3:1=15, 1-2:1=10, 0.5-1:1=5, <0.5:1=0
+    - RSI (12pts): <30=12, 30-40=9, 40-50=6
+    - BB Position (8pts): Below lower=8, touching=6, near=4
+    """
+    score = 0
+
+    # Entry Quality score (25 points) - use stop-aware quality
+    # Prefer entry_quality (stop-aware) over buy_quality
+    quality = row.get("entry_quality", row.get("buy_quality", "")).upper()
+    if quality == "EXCELLENT":
+        score += 25
+    elif quality == "GOOD":
+        score += 18
+    elif quality == "OK":
+        score += 12
+
+    # Distance to S1 (15 points)
+    price = row.get("current_price", 0)
+    s1 = row.get("s1", 0)
+    if price > 0 and s1 > 0:
+        distance_pct = abs((price - s1) / price * 100)
+        if distance_pct < 2:
+            score += 15
+        elif distance_pct < 5:
+            score += 11
+        elif distance_pct < 10:
+            score += 7
+
+    # Upside potential to R1 (20 points)
+    r1 = row.get("r1", 0)
+    upside_pct = 0
+    if price > 0 and r1 > 0 and r1 > price:
+        upside_pct = ((r1 - price) / price) * 100
+        if upside_pct > 15:
+            score += 20
+        elif upside_pct > 10:
+            score += 16
+        elif upside_pct > 5:
+            score += 12
+        elif upside_pct > 2:
+            score += 8
+
+    # Risk/Reward Ratio (20 points) - NEW!
+    risk_pct = abs((price - s1) / price * 100) if price > 0 and s1 > 0 else 0
+    # Apply minimum risk threshold to prevent unrealistic R/R when support is too close
+    risk_pct = max(risk_pct, 2.0)  # Minimum 2% risk
+    if upside_pct > 0 and risk_pct > 0:
+        rr_ratio = upside_pct / risk_pct  # Reward:Risk
+        if rr_ratio >= 3:
+            score += 20
+        elif rr_ratio >= 2:
+            score += 15
+        elif rr_ratio >= 1:
+            score += 10
+        elif rr_ratio >= 0.5:
+            score += 5
+
+    # RSI score (12 points)
+    rsi = row.get("rsi")
+    if rsi is not None:
+        if rsi < 30:
+            score += 12
+        elif rsi < 40:
+            score += 9
+        elif rsi < 50:
+            score += 6
+
+    # Bollinger Band position (8 points)
+    bb_lower = row.get("bb_lower")
+    if price > 0 and bb_lower is not None and bb_lower > 0:
+        bb_pct = (price - bb_lower) / bb_lower * 100
+        if bb_pct < 0:  # Below lower band
+            score += 8
+        elif bb_pct < 1:  # Touching lower band
+            score += 6
+        elif bb_pct < 3:  # Near lower band
+            score += 4
+
+    return score
+
+
+def calculate_sell_score(row):
+    """
+    Calculate trading score for sell opportunities (0-100)
+
+    Scoring factors:
+    - Quality (25pts): EXCELLENT=25, GOOD=18, OK=12
+    - Distance to R1 (15pts): <2%=15, 2-5%=11, 5-10%=7
+    - Profit to S1 (20pts): >15%=20, 10-15%=16, 5-10%=12, 2-5%=8
+    - Risk/Reward (20pts): >3:1=20, 2-3:1=15, 1-2:1=10, 0.5-1:1=5, <0.5:1=0
+    - RSI (12pts): >70=12, 60-70=9, 50-60=6
+    - BB Position (8pts): Above upper=8, touching=6, near=4
+    """
+    score = 0
+
+    # Quality score (25 points)
+    quality = row.get("r1_quality", "").upper()
+    if quality == "EXCELLENT":
+        score += 25
+    elif quality == "GOOD":
+        score += 18
+    elif quality == "OK":
+        score += 12
+
+    # Distance to R1 (15 points)
+    price = row.get("current_price", 0)
+    r1 = row.get("r1", 0)
+    if price > 0 and r1 > 0:
+        distance_pct = abs((r1 - price) / price * 100)
+        if distance_pct < 2:
+            score += 15
+        elif distance_pct < 5:
+            score += 11
+        elif distance_pct < 10:
+            score += 7
+
+    # Profit potential to S1 (20 points)
+    s1 = row.get("s1", 0)
+    profit_pct = 0
+    if price > 0 and s1 > 0 and price > s1:
+        profit_pct = ((price - s1) / price) * 100
+        if profit_pct > 15:
+            score += 20
+        elif profit_pct > 10:
+            score += 16
+        elif profit_pct > 5:
+            score += 12
+        elif profit_pct > 2:
+            score += 8
+
+    # Risk/Reward Ratio (20 points) - NEW!
+    risk_pct = (
+        abs((r1 - price) / price * 100) if price > 0 and r1 > 0 and r1 > price else 0
+    )
+    # Apply minimum risk threshold to prevent unrealistic R/R when resistance is too close
+    risk_pct = max(risk_pct, 2.0)  # Minimum 2% risk
+    if profit_pct > 0 and risk_pct > 0:
+        rr_ratio = profit_pct / risk_pct  # Reward:Risk
+        if rr_ratio >= 3:
+            score += 20
+        elif rr_ratio >= 2:
+            score += 15
+        elif rr_ratio >= 1:
+            score += 10
+        elif rr_ratio >= 0.5:
+            score += 5
+
+    # RSI score (12 points)
+    rsi = row.get("rsi")
+    if rsi is not None:
+        if rsi > 70:
+            score += 12
+        elif rsi > 60:
+            score += 9
+        elif rsi > 50:
+            score += 6
+
+    # Bollinger Band position (8 points)
+    bb_upper = row.get("bb_upper")
+    if price > 0 and bb_upper is not None and bb_upper > 0:
+        bb_pct = (price - bb_upper) / bb_upper * 100
+        if bb_pct > 0:  # Above upper band
+            score += 8
+        elif bb_pct > -1:  # Touching upper band
+            score += 6
+        elif bb_pct > -3:  # Near upper band
+            score += 5
+
+    return score
+
+
+def create_best_trades_excel(buy_df, sell_df, output_file, category=""):
+    """
+    Create Excel with ranked best trading opportunities
+
+    Args:
+        buy_df: DataFrame with buy opportunities
+        sell_df: DataFrame with sell opportunities
+        output_file: Path to save Excel file
+        category: Label (e.g., 'S&P 500', 'NASDAQ 100')
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill
+
+    wb = Workbook()
+    wb.remove(wb.active)  # Remove default sheet
+
+    # Styling
+    header_fill = PatternFill(
+        start_color="4472C4", end_color="4472C4", fill_type="solid"
+    )
+    header_font = Font(bold=True, color="FFFFFF")
+    center_align = Alignment(horizontal="center", vertical="center")
+
+    # === TAB 1: TOP BUY SETUPS ===
+    if not buy_df.empty:
+        # OPTION 1: Filter for EXCELLENT and GOOD quality only, then rank by Vol R:R
+        buy_df = buy_df.copy()
+
+        # Filter for quality setups only - use entry_quality (stop-aware)
+        quality_col = (
+            "entry_quality" if "entry_quality" in buy_df.columns else "buy_quality"
+        )
+        buy_df = buy_df[buy_df[quality_col].isin(["EXCELLENT", "GOOD"])].copy()
+
+        if not buy_df.empty:
+            # Calculate Vol R:R for ranking
+            def calc_vol_rr(row):
+                price = row.get("current_price", 0)
+                r1 = row.get("r1", 0)
+                suggested_stop = row.get("suggested_stop_pct", 5.0)
+
+                reward = (
+                    ((r1 - price) / price * 100)
+                    if price > 0 and r1 > 0 and r1 > price
+                    else 0
+                )
+                return (
+                    reward / suggested_stop if suggested_stop > 0 and reward > 0 else 0
+                )
+
+            buy_df["vol_rr"] = buy_df.apply(calc_vol_rr, axis=1)
+
+            # Sort by Vol R:R (highest first), take top 20
+            buy_df = buy_df.sort_values("vol_rr", ascending=False).head(20)
+            buy_df["rank"] = range(1, len(buy_df) + 1)
+
+            ws_buy = wb.create_sheet("Top Buy Setups")
+
+            # Title
+            ws_buy.cell(1, 1, f"{category} - BEST BUY SETUPS").font = Font(
+                bold=True, size=14
+            )
+            ws_buy.cell(
+                2,
+                1,
+                f"Top {len(buy_df)} EXCELLENT/GOOD entry quality (stop-aware) ranked by Vol R:R",
+            ).font = Font(italic=True, color="666666")
+
+            # Headers - Simplified for volatility-based trading
+            headers = [
+                "Rank",
+                "Ticker",
+                "Signal",
+                "Quality",
+                "Current Price",
+                "Vol R:R",
+                "Vol Stop Price",
+                "Vol Stop Loss %",
+                "Target R1",
+                "Target R1 Gain %",
+                "Support S1",
+                "Distance to S1",
+                "RSI",
+                "BB %",
+                "Daily Range %",
+                "Volatility",
+            ]
+
+            for col_num, header in enumerate(headers, 1):
+                cell = ws_buy.cell(4, col_num)
+                cell.value = header
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = center_align
+
+            # Data rows
+            row = 5
+            for _, stock in buy_df.iterrows():
+                price = stock.get("current_price", 0)
+                s1 = stock.get("s1", 0)
+                r1 = stock.get("r1", 0)
+                bb_lower = stock.get("bb_lower", 0)
+
+                # Calculate key metrics
+                reward_pct = (
+                    ((r1 - price) / price * 100)
+                    if price > 0 and r1 > 0 and r1 > price
+                    else None
+                )
+                bb_pct = (price - bb_lower) / bb_lower * 100 if bb_lower > 0 else None
+                distance_to_s1 = (
+                    abs((price - s1) / price * 100) if price > 0 and s1 > 0 else None
+                )
+
+                # Volatility stop calculations
+                suggested_stop = stock.get("suggested_stop_pct", 5.0)
+                vol_stop_price = price * (1 - suggested_stop / 100)
+                vol_rr = stock.get("vol_rr", 0)
+
+                # Write simplified row data
+                ws_buy.cell(row, 1, stock["rank"])
+                ws_buy.cell(row, 2, stock["ticker"])
+                ws_buy.cell(row, 3, stock.get("signal", ""))
+                # Use entry_quality (stop-aware) if available, otherwise buy_quality
+                quality_display = stock.get(
+                    "entry_quality", stock.get("buy_quality", "")
+                )
+                entry_flag = stock.get("entry_flag", "")
+                ws_buy.cell(row, 4, f"{quality_display} {entry_flag}")
+                ws_buy.cell(row, 5, price)
+                ws_buy.cell(row, 6, f"1:{vol_rr:.1f}" if vol_rr > 0 else "N/A")
+                ws_buy.cell(row, 7, vol_stop_price)
+                ws_buy.cell(row, 8, f"-{suggested_stop:.1f}%")
+                ws_buy.cell(row, 9, r1 if r1 > 0 else "")
+                ws_buy.cell(row, 10, f"+{reward_pct:.1f}%" if reward_pct else "")
+                ws_buy.cell(row, 11, s1)
+                ws_buy.cell(row, 12, f"{distance_to_s1:.1f}%" if distance_to_s1 else "")
+                ws_buy.cell(
+                    row,
+                    13,
+                    f"{stock.get('rsi'):.1f}" if stock.get("rsi") is not None else "",
+                )
+                ws_buy.cell(row, 14, f"{bb_pct:.1f}%" if bb_pct else "")
+                daily_range = stock.get("avg_daily_range_pct")
+                ws_buy.cell(row, 15, f"{daily_range:.2f}%" if daily_range else "")
+                ws_buy.cell(row, 16, stock.get("volatility_class", ""))
+                row += 1
+
+            # Auto-size columns
+            for col in ws_buy.columns:
+                max_length = 12
+                for cell in col:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                ws_buy.column_dimensions[col[0].column_letter].width = min(
+                    max_length + 2, 50
+                )
+
+    # === TAB 2: TOP SELL SETUPS ===
+    if not sell_df.empty:
+        # OPTION 1: Filter for EXCELLENT and GOOD quality only, then rank by Vol R:R
+        sell_df = sell_df.copy()
+
+        # Filter for quality setups only
+        sell_df = sell_df[sell_df["r1_quality"].isin(["EXCELLENT", "GOOD"])].copy()
+
+        if not sell_df.empty:
+            # Calculate Vol R:R for ranking
+            def calc_vol_rr(row):
+                price = row.get("current_price", 0)
+                s1 = row.get("s1", 0)
+                suggested_stop = row.get("suggested_stop_pct", 5.0)
+
+                reward = (
+                    ((price - s1) / price * 100)
+                    if price > 0 and s1 > 0 and price > s1
+                    else 0
+                )
+                return (
+                    reward / suggested_stop if suggested_stop > 0 and reward > 0 else 0
+                )
+
+            sell_df["vol_rr"] = sell_df.apply(calc_vol_rr, axis=1)
+
+            # Sort by Vol R:R (highest first), take top 20
+            sell_df = sell_df.sort_values("vol_rr", ascending=False).head(20)
+            sell_df["rank"] = range(1, len(sell_df) + 1)
+
+            ws_sell = wb.create_sheet("Top Sell Setups")
+
+            # Title
+            ws_sell.cell(1, 1, f"{category} - BEST SELL SETUPS").font = Font(
+                bold=True, size=14
+            )
+            ws_sell.cell(
+                2, 1, f"Top {len(sell_df)} EXCELLENT/GOOD quality ranked by Vol R:R"
+            ).font = Font(italic=True, color="666666")
+
+            # Headers - Simplified for volatility-based trading
+            headers = [
+                "Rank",
+                "Ticker",
+                "Signal",
+                "Quality",
+                "Current Price",
+                "Vol R:R",
+                "Vol Stop Price",
+                "Vol Stop Loss %",
+                "Target S1",
+                "Target S1 Gain %",
+                "Resistance R1",
+                "Distance to R1",
+                "RSI",
+                "BB %",
+                "Daily Range %",
+                "Volatility",
+            ]
+
+            for col_num, header in enumerate(headers, 1):
+                cell = ws_sell.cell(4, col_num)
+                cell.value = header
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = center_align
+
+            # Data rows
+            row = 5
+            for _, stock in sell_df.iterrows():
+                price = stock.get("current_price", 0)
+                r1 = stock.get("r1", 0)
+                s1 = stock.get("s1", 0)
+                bb_upper = stock.get("bb_upper", 0)
+
+                # Calculate key metrics (for sells: profit down to S1, risk up to vol stop)
+                reward_pct = (
+                    ((price - s1) / price * 100)
+                    if price > 0 and s1 > 0 and price > s1
+                    else None
+                )
+                bb_pct = (price - bb_upper) / bb_upper * 100 if bb_upper > 0 else None
+                distance_to_r1 = (
+                    abs((r1 - price) / price * 100) if price > 0 and r1 > 0 else None
+                )
+
+                # Volatility stop calculations
+                suggested_stop = stock.get("suggested_stop_pct", 5.0)
+                vol_stop_price = price * (1 + suggested_stop / 100)
+                vol_rr = stock.get("vol_rr", 0)
+
+                # Write simplified row data
+                ws_sell.cell(row, 1, stock["rank"])
+                ws_sell.cell(row, 2, stock["ticker"])
+                ws_sell.cell(row, 3, stock.get("signal", ""))
+                ws_sell.cell(row, 4, stock.get("r1_quality", ""))
+                ws_sell.cell(row, 5, price)
+                ws_sell.cell(row, 6, f"1:{vol_rr:.1f}" if vol_rr > 0 else "N/A")
+                ws_sell.cell(row, 7, vol_stop_price)
+                ws_sell.cell(row, 8, f"-{suggested_stop:.1f}%")
+                ws_sell.cell(row, 9, s1 if s1 > 0 else "")
+                ws_sell.cell(row, 10, f"+{reward_pct:.1f}%" if reward_pct else "")
+                ws_sell.cell(row, 11, r1)
+                ws_sell.cell(
+                    row, 12, f"{distance_to_r1:.1f}%" if distance_to_r1 else ""
+                )
+                ws_sell.cell(
+                    row,
+                    13,
+                    f"{stock.get('rsi'):.1f}" if stock.get("rsi") is not None else "",
+                )
+                ws_sell.cell(row, 14, f"{bb_pct:.1f}%" if bb_pct else "")
+                daily_range = stock.get("avg_daily_range_pct")
+                ws_sell.cell(row, 15, f"{daily_range:.2f}%" if daily_range else "")
+                ws_sell.cell(row, 16, stock.get("volatility_class", ""))
+                row += 1
+
+            # Auto-size columns
+            for col in ws_sell.columns:
+                max_length = 12
+                for cell in col:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                ws_sell.column_dimensions[col[0].column_letter].width = min(
+                    max_length + 2, 50
+                )
+
+    # === TAB 3: SUMMARY ===
+    ws_summary = wb.create_sheet("Summary", 0)  # Insert at beginning
+    ws_summary.cell(1, 1, f"{category} - BEST TRADES SUMMARY").font = Font(
+        bold=True, size=14
+    )
+    ws_summary.cell(
+        3, 1, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    ).font = Font(italic=True)
+
+    ws_summary.cell(5, 1, "Buy Opportunities:").font = Font(bold=True)
+    ws_summary.cell(5, 2, len(buy_df) if not buy_df.empty else 0)
+
+    ws_summary.cell(6, 1, "Sell Opportunities:").font = Font(bold=True)
+    ws_summary.cell(6, 2, len(sell_df) if not sell_df.empty else 0)
+
+    if not buy_df.empty:
+        ws_summary.cell(8, 1, "Top Buy Vol R:R:").font = Font(bold=True)
+        ws_summary.cell(8, 2, f"{buy_df['vol_rr'].max():.2f}:1")
+        ws_summary.cell(9, 1, "Avg Buy Vol R:R:").font = Font(bold=True)
+        ws_summary.cell(9, 2, f"{buy_df['vol_rr'].mean():.2f}:1")
+
+    if not sell_df.empty:
+        ws_summary.cell(11, 1, "Top Sell Vol R:R:").font = Font(bold=True)
+        ws_summary.cell(11, 2, f"{sell_df['vol_rr'].max():.2f}:1")
+        ws_summary.cell(12, 1, "Avg Sell Vol R:R:").font = Font(bold=True)
+        ws_summary.cell(12, 2, f"{sell_df['vol_rr'].mean():.2f}:1")
+
+    ws_summary.column_dimensions["A"].width = 25
+    ws_summary.column_dimensions["B"].width = 20
+
+    # Save workbook
+    wb.save(output_file)
+    print(f"[OK] Best Trades Excel created: {output_file}")
 
 
 def create_excel_output(buy_df, sell_df, output_file, category=""):
@@ -506,9 +1053,14 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
         # Headers at row 4
         buy_headers = [
             "Ticker",
-            "Signal",
             "Price",
-            "Buy Quality",
+            "Signal",
+            "RSI",
+            "BB_Upper",
+            "BB_Middle",
+            "BB_Lower",
+            "Entry Quality",
+            "Entry Flag",
             "S1",
             "S2",
             "S3",
@@ -518,6 +1070,8 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
             "D50 MA",
             "D100 MA",
             "D200 MA",
+            "Stop Level (8%)",
+            "Accessible Supports",
         ]
 
         for col_num, header in enumerate(buy_headers, 1):
@@ -531,18 +1085,25 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
         row = 5
         for _, stock in buy_df.sort_values("ticker").iterrows():
             ws_buy.cell(row, 1, stock["ticker"])
-            ws_buy.cell(row, 2, stock["signal"])
-            ws_buy.cell(row, 3, stock.get("current_price"))
-            ws_buy.cell(row, 4, stock.get("buy_quality"))
-            ws_buy.cell(row, 5, stock.get("s1"))
-            ws_buy.cell(row, 6, stock.get("s2"))
-            ws_buy.cell(row, 7, stock.get("s3"))
-            ws_buy.cell(row, 8, stock.get("r1"))
-            ws_buy.cell(row, 9, stock.get("r2"))
-            ws_buy.cell(row, 10, stock.get("r3"))
-            ws_buy.cell(row, 11, stock.get("d50"))
-            ws_buy.cell(row, 12, stock.get("d100"))
-            ws_buy.cell(row, 13, stock.get("d200"))
+            ws_buy.cell(row, 2, stock.get("current_price"))
+            ws_buy.cell(row, 3, stock["signal"])
+            ws_buy.cell(row, 4, stock.get("rsi"))
+            ws_buy.cell(row, 5, stock.get("bb_upper"))
+            ws_buy.cell(row, 6, stock.get("bb_middle"))
+            ws_buy.cell(row, 7, stock.get("bb_lower"))
+            ws_buy.cell(row, 8, stock.get("entry_quality", stock.get("buy_quality")))
+            ws_buy.cell(row, 9, stock.get("entry_flag", ""))
+            ws_buy.cell(row, 10, stock.get("s1"))
+            ws_buy.cell(row, 11, stock.get("s2"))
+            ws_buy.cell(row, 12, stock.get("s3"))
+            ws_buy.cell(row, 13, stock.get("r1"))
+            ws_buy.cell(row, 14, stock.get("r2"))
+            ws_buy.cell(row, 15, stock.get("r3"))
+            ws_buy.cell(row, 16, stock.get("d50"))
+            ws_buy.cell(row, 17, stock.get("d100"))
+            ws_buy.cell(row, 18, stock.get("d200"))
+            ws_buy.cell(row, 19, stock.get("stop_level"))
+            ws_buy.cell(row, 20, stock.get("accessible_supports_count"))
             row += 1
 
         # Auto-size columns
@@ -555,12 +1116,14 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
                 max_length + 2, 50
             )
 
-    # === TAB 2: SELL SIGNALS ===
+    # === TAB 2: SELL OPPORTUNITIES ===
     if not sell_df.empty:
-        ws_sell = wb.create_sheet("Sell Signals")
+        ws_sell = wb.create_sheet("Sell Opportunities")
 
         # Title
-        ws_sell.cell(1, 1, f"{category} - SELL SIGNALS").font = Font(bold=True, size=14)
+        ws_sell.cell(1, 1, f"{category} - SELL OPPORTUNITIES").font = Font(
+            bold=True, size=14
+        )
         ws_sell.cell(2, 1, f"Bearish signals - reduce exposure").font = Font(
             italic=True, color="666666"
         )
@@ -568,8 +1131,12 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
         # Headers at row 4
         sell_headers = [
             "Ticker",
-            "Signal",
             "Price",
+            "Signal",
+            "RSI",
+            "BB_Upper",
+            "BB_Middle",
+            "BB_Lower",
             "R1 Quality",
             "R1",
             "R2",
@@ -590,15 +1157,19 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
         row = 5
         for _, stock in sell_df.sort_values("ticker").iterrows():
             ws_sell.cell(row, 1, stock["ticker"])
-            ws_sell.cell(row, 2, stock["signal"])
-            ws_sell.cell(row, 3, stock.get("current_price"))
-            ws_sell.cell(row, 4, stock.get("r1_quality"))
-            ws_sell.cell(row, 5, stock.get("r1"))
-            ws_sell.cell(row, 6, stock.get("r2"))
-            ws_sell.cell(row, 7, stock.get("r3"))
-            ws_sell.cell(row, 8, stock.get("d50"))
-            ws_sell.cell(row, 9, stock.get("d100"))
-            ws_sell.cell(row, 10, stock.get("d200"))
+            ws_sell.cell(row, 2, stock.get("current_price"))
+            ws_sell.cell(row, 3, stock["signal"])
+            ws_sell.cell(row, 4, stock.get("rsi"))
+            ws_sell.cell(row, 5, stock.get("bb_upper"))
+            ws_sell.cell(row, 6, stock.get("bb_middle"))
+            ws_sell.cell(row, 7, stock.get("bb_lower"))
+            ws_sell.cell(row, 8, stock.get("r1_quality"))
+            ws_sell.cell(row, 9, stock.get("r1"))
+            ws_sell.cell(row, 10, stock.get("r2"))
+            ws_sell.cell(row, 11, stock.get("r3"))
+            ws_sell.cell(row, 12, stock.get("d50"))
+            ws_sell.cell(row, 13, stock.get("d100"))
+            ws_sell.cell(row, 14, stock.get("d200"))
             row += 1
 
         # Auto-size columns
@@ -618,7 +1189,7 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
     if not buy_df.empty:
         print(f"  - Buy Opportunities: {len(buy_df)} stocks")
     if not sell_df.empty:
-        print(f"  - Sell Signals: {len(sell_df)} stocks")
+        print(f"  - Sell Opportunities: {len(sell_df)} stocks")
 
 
 def create_portfolio_excel(all_df, output_file, category="Portfolio"):
@@ -814,9 +1385,25 @@ def create_pdf_report(buy_df, sell_df, output_file, timestamp_str, category=""):
             signal = stock["signal"]
             buy_quality = stock.get("buy_quality", "N/A")
 
-            # Stock header
-            header_text = f"<b>{ticker}</b> - ${price:,.2f} ({signal})"
+            # Get stop-aware entry quality
+            entry_quality = stock.get("entry_quality", buy_quality)
+            entry_flag = stock.get("entry_flag", "")
+            entry_note = stock.get("entry_note", "")
+            stop_tolerance = stock.get("stop_tolerance_pct", 8.0)
+            stop_level = stock.get("stop_level", 0)
+
+            # Stock header with entry flag
+            header_text = f"<b>{ticker}</b> - ${price:,.2f} ({signal}) {entry_flag}"
             elements.append(Paragraph(header_text, subsection_style))
+
+            # Entry quality assessment with stop awareness
+            entry_summary = f"""
+            <b>Entry Quality ({stop_tolerance:.0f}% Stop):</b> {entry_quality}<br/>
+            <i>{entry_note}</i><br/>
+            <b>Stop Level:</b> ${stop_level:,.2f} (-{stop_tolerance:.1f}%)
+            """
+            elements.append(Paragraph(entry_summary, styles["Normal"]))
+            elements.append(Spacer(1, 0.05 * inch))
 
             # Support levels (entry zones)
             s1 = stock.get("s1")
@@ -987,9 +1574,443 @@ def create_pdf_report(buy_df, sell_df, output_file, timestamp_str, category=""):
         elements.append(Paragraph("SELL SIGNALS (0 stocks)", section_style))
         elements.append(Paragraph("No bearish signals at this time.", styles["Normal"]))
 
+    # Glossary Section
+    elements.append(PageBreak())
+    elements.append(Paragraph("GLOSSARY OF TERMS", section_style))
+    elements.append(Spacer(1, 0.1 * inch))
+
+    glossary_items = [
+        (
+            "<b>Support Levels (S1, S2, S3):</b>",
+            "Price levels where buying pressure may prevent further decline. S1 is the nearest support.",
+        ),
+        (
+            "<b>Resistance Levels (R1, R2, R3):</b>",
+            "Price levels where selling pressure may prevent further advance. R1 is the nearest resistance.",
+        ),
+        (
+            "<b>RSI (Relative Strength Index):</b>",
+            "Momentum indicator (0-100). Below 30 = oversold, above 70 = overbought.",
+        ),
+        (
+            "<b>Volatility Stop:</b>",
+            "Dynamic stop-loss based on stock's volatility (typically 5-8% below entry for buys).",
+        ),
+        (
+            "<b>Vol R:R (Volatility Risk-Reward):</b>",
+            "Ratio of potential reward to volatility stop risk. Higher is better (3+ is excellent).",
+        ),
+        (
+            "<b>D50/D100/D200:</b>",
+            "50/100/200-day moving averages. Key trend indicators and support/resistance levels.",
+        ),
+        (
+            "<b>POC (Point of Control):</b>",
+            "Price level with highest trading volume. Strong support/resistance.",
+        ),
+        (
+            "<b>VAH/VAL (Value Area High/Low):</b>",
+            "Price range containing 70% of volume. Defines fair value zone.",
+        ),
+        (
+            "<b>HVN (High Volume Node):</b>",
+            "Price level with significant trading activity. Acts as support/resistance.",
+        ),
+        (
+            "<b>FULL HOLD + ADD:</b>",
+            "Strong bullish signal. Stock is in uptrend with multiple support levels.",
+        ),
+        (
+            "<b>FULL SELL + SHORT:</b>",
+            "Strong bearish signal. Stock is in downtrend with multiple resistance levels.",
+        ),
+    ]
+
+    for term, definition in glossary_items:
+        elements.append(Paragraph(f"{term} {definition}", styles["Normal"]))
+        elements.append(Spacer(1, 0.08 * inch))
+
     # Build PDF
     doc.build(elements)
     print(f"[OK] PDF report created: {output_file}")
+
+
+def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
+    """
+    Create PDF with ranked best trading opportunities
+
+    Args:
+        buy_df: DataFrame with buy opportunities
+        sell_df: DataFrame with sell opportunities
+        output_file: Path to save PDF file
+        category: Label (e.g., 'S&P 500', 'NASDAQ 100')
+    """
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        SimpleDocTemplate,
+        Paragraph,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+    doc = SimpleDocTemplate(
+        str(output_file),
+        pagesize=letter,
+        rightMargin=30,
+        leftMargin=30,
+        topMargin=30,
+        bottomMargin=30,
+    )
+
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # Custom styles
+    title_style = ParagraphStyle(
+        "CustomTitle",
+        parent=styles["Heading1"],
+        fontSize=24,
+        textColor=colors.HexColor("#2c3e50"),
+        spaceAfter=20,
+        alignment=TA_CENTER,
+    )
+
+    section_style = ParagraphStyle(
+        "Section",
+        parent=styles["Heading2"],
+        fontSize=16,
+        textColor=colors.HexColor("#2980b9"),
+        spaceAfter=12,
+        spaceBefore=20,
+    )
+
+    # === TITLE PAGE ===
+    report_title = category.replace("&", "&amp;")
+    cover_title = f"Best Trading Setups<br/>{report_title}<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
+    elements.append(Paragraph(cover_title, title_style))
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # Calculate Vol R:R and rank - OPTION 1 approach
+    buy_scored = buy_df.copy() if not buy_df.empty else pd.DataFrame()
+    sell_scored = sell_df.copy() if not sell_df.empty else pd.DataFrame()
+
+    if not buy_scored.empty:
+        # Filter for EXCELLENT and GOOD entry quality only (stop-aware)
+        quality_col = (
+            "entry_quality" if "entry_quality" in buy_scored.columns else "buy_quality"
+        )
+        buy_scored = buy_scored[
+            buy_scored[quality_col].isin(["EXCELLENT", "GOOD"])
+        ].copy()
+
+        if not buy_scored.empty:
+            # Calculate Vol R:R for ranking
+            def calc_vol_rr(row):
+                price = row.get("current_price", 0)
+                r1 = row.get("r1", 0)
+                suggested_stop = row.get("suggested_stop_pct", 5.0)
+
+                reward = (
+                    ((r1 - price) / price * 100)
+                    if price > 0 and r1 > 0 and r1 > price
+                    else 0
+                )
+                return (
+                    reward / suggested_stop if suggested_stop > 0 and reward > 0 else 0
+                )
+
+            buy_scored["vol_rr"] = buy_scored.apply(calc_vol_rr, axis=1)
+
+            # Sort by Vol R:R (highest first), take top 15
+            buy_scored = buy_scored.sort_values("vol_rr", ascending=False).head(15)
+
+    if not sell_scored.empty:
+        # Filter for EXCELLENT and GOOD quality only
+        sell_scored = sell_scored[
+            sell_scored["r1_quality"].isin(["EXCELLENT", "GOOD"])
+        ].copy()
+
+        if not sell_scored.empty:
+            # Calculate Vol R:R for ranking
+            def calc_vol_rr(row):
+                price = row.get("current_price", 0)
+                s1 = row.get("s1", 0)
+                suggested_stop = row.get("suggested_stop_pct", 5.0)
+
+                reward = (
+                    ((price - s1) / price * 100)
+                    if price > 0 and s1 > 0 and price > s1
+                    else 0
+                )
+                return (
+                    reward / suggested_stop if suggested_stop > 0 and reward > 0 else 0
+                )
+
+            sell_scored["vol_rr"] = sell_scored.apply(calc_vol_rr, axis=1)
+
+            # Sort by Vol R:R (highest first), take top 15
+            sell_scored = sell_scored.sort_values("vol_rr", ascending=False).head(15)
+
+    # Summary
+    summary_text = f"""
+    <b>Best Trading Setups - Volatility-Based Ranking</b><br/>
+    <br/>
+    <b>Buy Opportunities:</b> {len(buy_scored)} EXCELLENT/GOOD entry quality (stop-aware) setups<br/>
+    <b>Sell Signals:</b> {len(sell_scored)} EXCELLENT/GOOD quality setups<br/>
+    <br/>
+    <b>Selection Criteria:</b><br/>
+    • <b>Quality Filter:</b> Only EXCELLENT or GOOD entry quality (supports within 8% stop tolerance)<br/>
+    • <b>Ranking:</b> Sorted by Vol R:R (Volatility Risk/Reward Ratio) - highest first<br/>
+    <br/>
+    <b>What is Vol R:R?</b><br/>
+    The ratio of potential reward (to Target R1/S1) divided by volatility-based stop loss %.<br/>
+    Example: +12% reward / 6% vol stop = 2:1 Vol R:R<br/>
+    <br/>
+    <b>Quality Ratings (Stop-Aware):</b><br/>
+    • <b>EXCELLENT:</b> Multiple strong supports within your 8% stop range<br/>
+    • <b>GOOD:</b> At least one strong support accessible within 8% stop tolerance<br/>
+    • Filters out entries where good supports are beyond your stop range<br/>
+    <br/>
+    <i>Focus on higher Vol R:R setups (2:1 or better) for optimal risk-adjusted returns.</i>
+    """
+    elements.append(Paragraph(summary_text, styles["Normal"]))
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # === TOP BUY SETUPS ===
+    if not buy_scored.empty:
+        elements.append(
+            Paragraph(
+                f"TOP {len(buy_scored)} BUY SETUPS (Ranked by Vol R:R)", section_style
+            )
+        )
+        elements.append(Spacer(1, 0.1 * inch))
+
+        for rank, (_, stock) in enumerate(buy_scored.iterrows(), 1):
+            ticker = stock["ticker"]
+            price = stock.get("current_price", 0)
+            # Use entry_quality (stop-aware) if available
+            quality = stock.get("entry_quality", stock.get("buy_quality", ""))
+            entry_flag = stock.get("entry_flag", "")
+            signal = stock.get("signal", "")
+            s1 = stock.get("s1", 0)
+            r1 = stock.get("r1", 0)
+            rsi = stock.get("rsi")
+            vol_rr = stock.get("vol_rr", 0)
+
+            # Calculate reward potential
+            reward_pct = (
+                ((r1 - price) / price * 100)
+                if price > 0 and r1 > 0 and r1 > price
+                else 0
+            )
+            distance_to_s1 = (
+                abs((price - s1) / price * 100) if price > 0 and s1 > 0 else 0
+            )
+
+            # Volatility-based stop
+            suggested_stop = stock.get("suggested_stop_pct", 5.0)
+            vol_stop_price = price * (1 - suggested_stop / 100)
+
+            # Quality badge color
+            if quality == "EXCELLENT":
+                quality_color = "#27ae60"  # Green
+            else:  # GOOD
+                quality_color = "#3498db"  # Blue
+
+            # Vol R:R color
+            if vol_rr >= 3:
+                rr_color = "#27ae60"  # Green
+            elif vol_rr >= 2:
+                rr_color = "#3498db"  # Blue
+            elif vol_rr >= 1:
+                rr_color = "#f39c12"  # Orange
+            else:
+                rr_color = "#e74c3c"  # Red
+
+            # Volatility class display
+            volatility_class = stock.get("volatility_class", "")
+            daily_range = stock.get("avg_daily_range_pct", 0)
+
+            # Stop-aware details
+            stop_tolerance = stock.get("stop_tolerance_pct", 8.0)
+            stop_level = stock.get("stop_level", price * 0.92)
+            accessible_supports = stock.get("accessible_supports_count", 0)
+            entry_note = stock.get("entry_note", "")
+
+            card_text = f"""
+            <font size=12><b>#{rank}. {ticker}</b> - <font color="{quality_color}"><b>{quality}</b></font> {entry_flag} | Vol R:R: <font color="{rr_color}"><b>1:{vol_rr:.1f}</b></font></font><br/>
+            <b>Current Price:</b> ${price:.2f} | <b>RSI:</b> {f'{rsi:.1f}' if rsi else 'N/A'} | <b>Signal:</b> {signal or 'N/A'}<br/>
+            <br/>
+            <b>Volatility Stop ({suggested_stop:.1f}%):</b> ${vol_stop_price:.2f} loss = <font color="#e74c3c">-{suggested_stop:.1f}%</font><br/>
+            <b>8% Stop Tolerance:</b> ${stop_level:.2f} | <b>Accessible Supports:</b> {accessible_supports} within range<br/>
+            <b>Target R1:</b> ${r1:.2f} gain = <font color="#27ae60">+{reward_pct:.1f}%</font><br/>
+            <br/>
+            <b>Support S1:</b> ${s1:.2f} ({distance_to_s1:.1f}% away) | <b>Volatility:</b> {volatility_class} (~{daily_range:.2f}% daily range)<br/>
+            <i>{entry_note}</i>
+            """
+            elements.append(Paragraph(card_text, styles["Normal"]))
+            elements.append(Spacer(1, 0.15 * inch))
+    else:
+        elements.append(Paragraph("TOP BUY SETUPS", section_style))
+        elements.append(
+            Paragraph(
+                "No EXCELLENT/GOOD entry quality (stop-aware) buy opportunities found. Good supports may exist but are beyond 8% stop tolerance.",
+                styles["Normal"],
+            )
+        )
+        elements.append(Spacer(1, 0.2 * inch))
+
+    # === TOP SELL SETUPS ===
+    if not sell_scored.empty:
+        elements.append(
+            Paragraph(
+                f"TOP {len(sell_scored)} SELL SETUPS (Ranked by Vol R:R)", section_style
+            )
+        )
+        elements.append(Spacer(1, 0.1 * inch))
+
+        for rank, (_, stock) in enumerate(sell_scored.iterrows(), 1):
+            ticker = stock["ticker"]
+            price = stock.get("current_price", 0)
+            quality = stock.get("r1_quality", "")
+            signal = stock.get("signal", "")
+            r1 = stock.get("r1", 0)
+            s1 = stock.get("s1", 0)
+            rsi = stock.get("rsi")
+            vol_rr = stock.get("vol_rr", 0)
+
+            # Calculate reward potential
+            reward_pct = (
+                ((price - s1) / price * 100)
+                if price > 0 and s1 > 0 and price > s1
+                else 0
+            )
+            distance_to_r1 = (
+                abs((r1 - price) / price * 100) if price > 0 and r1 > 0 else 0
+            )
+
+            # Volatility-based stop (for sell: stop is above price)
+            suggested_stop = stock.get("suggested_stop_pct", 5.0)
+            vol_stop_price = price * (1 + suggested_stop / 100)
+
+            # Quality badge color
+            if quality == "EXCELLENT":
+                quality_color = "#27ae60"  # Green
+            else:  # GOOD
+                quality_color = "#3498db"  # Blue
+
+            # Vol R:R color
+            if vol_rr >= 3:
+                rr_color = "#27ae60"  # Green
+            elif vol_rr >= 2:
+                rr_color = "#3498db"  # Blue
+            elif vol_rr >= 1:
+                rr_color = "#f39c12"  # Orange
+            else:
+                rr_color = "#e74c3c"  # Red
+
+            # Volatility class display
+            volatility_class = stock.get("volatility_class", "")
+            daily_range = stock.get("avg_daily_range_pct", 0)
+
+            # No entry flag for sells
+            entry_flag = ""
+
+            card_text = f"""
+            <font size=12><b>#{rank}. {ticker}</b> - <font color="{quality_color}"><b>{quality}</b> {entry_flag}</font> | Vol R:R: <font color="{rr_color}"><b>1:{vol_rr:.1f}</b></font></font><br/>
+            <b>Current Price:</b> ${price:.2f} | <b>RSI:</b> {f'{rsi:.1f}' if rsi else 'N/A'} | <b>Signal:</b> {signal or 'N/A'}<br/>
+            <br/>
+            <b>Volatility Stop ({suggested_stop:.1f}%):</b> ${vol_stop_price:.2f} loss = <font color="#e74c3c">-{suggested_stop:.1f}%</font><br/>
+            <b>Target S1:</b> ${s1:.2f} gain = <font color="#27ae60">+{reward_pct:.1f}%</font><br/>
+            <br/>
+            <b>Resistance R1:</b> ${r1:.2f} ({distance_to_r1:.1f}% away) | <b>Volatility:</b> {volatility_class} (~{daily_range:.2f}% daily range)
+            """
+            elements.append(Paragraph(card_text, styles["Normal"]))
+            elements.append(Spacer(1, 0.15 * inch))
+    else:
+        elements.append(Paragraph("TOP SELL SETUPS", section_style))
+        elements.append(
+            Paragraph(
+                "No EXCELLENT/GOOD quality sell opportunities found.", styles["Normal"]
+            )
+        )
+
+    # Glossary Section
+    elements.append(PageBreak())
+    elements.append(Paragraph("GLOSSARY OF TERMS", section_style))
+    elements.append(Spacer(1, 0.1 * inch))
+
+    glossary_items = [
+        ("<b>Entry Quality Ratings:</b>", ""),
+        (
+            "  • <b>EXCELLENT:</b>",
+            "2+ strong supports accessible within stop tolerance. Safest entries.",
+        ),
+        (
+            "  • <b>GOOD:</b>",
+            "1+ good support accessible within stop tolerance. Solid risk management.",
+        ),
+        (
+            "  • <b>OK:</b>",
+            "Moderate supports available. Acceptable but watch closely.",
+        ),
+        (
+            "  • <b>CAUTION:</b>",
+            "Thin or extended. Limited protection within stop range.",
+        ),
+        ("", ""),
+        ("<b>Entry Flags:</b>", ""),
+        (
+            "  • <b>SAFE ENTRY:</b>",
+            "Multiple excellent supports protect your stop level.",
+        ),
+        ("  • <b>IDEAL:</b>", "Near major support with good upside potential."),
+        ("  • <b>ACCEPTABLE:</b>", "Reasonable entry but monitor risk carefully."),
+        ("  • <b>THIN:</b>", "Limited support structure. Higher risk."),
+        ("  • <b>EXTENDED:</b>", "Far from supports. Consider waiting for pullback."),
+        ("  • <b>WAIT:</b>", "No accessible supports within 8% stop. Do not enter."),
+        ("", ""),
+        (
+            "<b>Vol R:R (Volatility Risk-Reward):</b>",
+            "Ratio of potential gain to volatility stop risk. 3+ = excellent, 2+ = good, 1+ = acceptable.",
+        ),
+        (
+            "<b>Volatility Stop:</b>",
+            "Stop-loss based on stock's price movement (typically 5-8%). Limits maximum loss.",
+        ),
+        (
+            "<b>Stop Tolerance:</b>",
+            "Maximum acceptable stop distance (8%). Entries are rated based on supports within this range.",
+        ),
+        (
+            "<b>RSI:</b>",
+            "Relative Strength Index (0-100). <30 oversold, >70 overbought.",
+        ),
+        ("<b>S1/R1:</b>", "Primary support and resistance levels. Key price targets."),
+        (
+            "<b>D50/D100/D200:</b>",
+            "50/100/200-day moving averages. Trend and support indicators.",
+        ),
+    ]
+
+    for term, definition in glossary_items:
+        if term and definition:
+            elements.append(Paragraph(f"{term} {definition}", styles["Normal"]))
+            elements.append(Spacer(1, 0.08 * inch))
+        elif term and not definition:
+            elements.append(Paragraph(term, styles["Normal"]))
+            elements.append(Spacer(1, 0.05 * inch))
+        else:
+            elements.append(Spacer(1, 0.1 * inch))
+
+    # Build PDF
+    doc.build(elements)
+    print(f"[OK] Best Trades PDF created: {output_file}")
 
 
 if __name__ == "__main__":
@@ -1042,20 +2063,38 @@ if __name__ == "__main__":
 
     if not sp500_results.empty:
         sp500_buy = filter_buy_signals(sp500_results, "FULL HOLD + ADD")
+        sp500_sell = filter_sell_signals(sp500_results)
         print(f"\nðŸŽ¯ S&P 500: {len(sp500_buy)} FULL HOLD + ADD signals found")
+        print(f"âš ï¸ S&P 500: {len(sp500_sell)} bearish signals found")
 
-        if not sp500_buy.empty:
+        if not sp500_buy.empty or not sp500_sell.empty:
             # Save S&P 500 results
             xlsx_path = results_dir / f"sp500_analysis_{timestamp}.xlsx"
             pdf_path = results_dir / f"scanner_report_sp500_{timestamp}.pdf"
 
-            create_excel_output(sp500_buy, xlsx_path, category="S&P 500")
+            create_excel_output(sp500_buy, sp500_sell, xlsx_path, category="S&P 500")
             create_pdf_report(
                 sp500_buy, sp500_results, pdf_path, timestamp, category="S&P 500"
             )
 
             print(f"  âœ“ Excel: {xlsx_path.name}")
             print(f"  âœ“ PDF: {pdf_path.name}")
+
+            # Create Best Trades reports
+            best_trades_xlsx = (
+                results_dir / "sp500" / f"sp500_best_trades_{timestamp}.xlsx"
+            )
+            best_trades_pdf = (
+                results_dir / "sp500" / f"sp500_best_trades_{timestamp}.pdf"
+            )
+            (results_dir / "sp500").mkdir(exist_ok=True)
+            create_best_trades_excel(
+                sp500_buy, sp500_sell, best_trades_xlsx, category="S&P 500"
+            )
+            create_best_trades_pdf(
+                sp500_buy, sp500_sell, best_trades_pdf, category="S&P 500"
+            )
+            print(f"  Best Trades: {best_trades_xlsx.name}, {best_trades_pdf.name}")
 
     # === SCAN 2: NASDAQ 100 ===
     print("\n" + "=" * 80)
@@ -1078,14 +2117,18 @@ if __name__ == "__main__":
 
     if not nasdaq100_results.empty:
         nasdaq100_buy = filter_buy_signals(nasdaq100_results, "FULL HOLD + ADD")
+        nasdaq100_sell = filter_sell_signals(nasdaq100_results)
         print(f"\nðŸŽ¯ NASDAQ 100: {len(nasdaq100_buy)} FULL HOLD + ADD signals found")
+        print(f"âš ï¸ NASDAQ 100: {len(nasdaq100_sell)} bearish signals found")
 
-        if not nasdaq100_buy.empty:
+        if not nasdaq100_buy.empty or not nasdaq100_sell.empty:
             # Save NASDAQ 100 results
             xlsx_path = results_dir / f"nasdaq100_analysis_{timestamp}.xlsx"
             pdf_path = results_dir / f"scanner_report_nasdaq100_{timestamp}.pdf"
 
-            create_excel_output(nasdaq100_buy, xlsx_path, category="NASDAQ 100")
+            create_excel_output(
+                nasdaq100_buy, nasdaq100_sell, xlsx_path, category="NASDAQ 100"
+            )
             create_pdf_report(
                 nasdaq100_buy,
                 nasdaq100_results,
@@ -1095,8 +2138,23 @@ if __name__ == "__main__":
             )
 
             print(f"  âœ“ Excel: {xlsx_path.name}")
+            best_trades_xlsx = (
+                results_dir / "nasdaq100" / f"nasdaq100_best_trades_{timestamp}.xlsx"
+            )
+            best_trades_pdf = (
+                results_dir / "nasdaq100" / f"nasdaq100_best_trades_{timestamp}.pdf"
+            )
+            (results_dir / "nasdaq100").mkdir(exist_ok=True)
+            create_best_trades_excel(
+                nasdaq100_buy, nasdaq100_sell, best_trades_xlsx, category="NASDAQ 100"
+            )
+            create_best_trades_pdf(
+                nasdaq100_buy, nasdaq100_sell, best_trades_pdf, category="NASDAQ 100"
+            )
+
             print(f"  âœ“ PDF: {pdf_path.name}")
 
+            print(f"  Best Trades: {best_trades_xlsx.name}, {best_trades_pdf.name}")
     # === SCAN 3: PORTFOLIO STOCKS ===
     print("\n" + "=" * 80)
     print("SCAN 3 of 3: PORTFOLIO STOCKS")

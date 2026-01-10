@@ -607,6 +607,51 @@ def calculate_bollinger_bands(df, period=20, num_std=2):
     )
 
 
+def calculate_daily_volatility(df, period=20):
+    """
+    Calculate average daily range as a volatility measure.
+
+    Returns: dict with volatility metrics
+    - avg_daily_range_pct: Average % range (High-Low)/Close over period
+    - volatility_class: LOW/MEDIUM/HIGH/EXTREME
+    - suggested_stop_pct: Recommended stop loss % (2-3x daily range, min 5%)
+    - stop_risk: Risk level for 5% stop (SAFE/ACCEPTABLE/RISKY/VERY_RISKY)
+    """
+    if df is None or df.empty or len(df) < period:
+        return None
+
+    # Calculate daily range as percentage of close
+    daily_range_pct = ((df["High"] - df["Low"]) / df["Close"]) * 100
+
+    # Get average over period
+    avg_daily_range_pct = daily_range_pct.tail(period).mean()
+
+    # Classify volatility
+    if avg_daily_range_pct < 2.0:
+        volatility_class = "LOW"
+        suggested_stop_pct = 5.0  # Default
+        stop_risk = "SAFE"  # 5% is 2.5x+ daily range
+    elif avg_daily_range_pct < 3.0:
+        volatility_class = "MEDIUM"
+        suggested_stop_pct = 5.0  # Acceptable
+        stop_risk = "ACCEPTABLE"  # 5% is 1.7-2.5x daily range
+    elif avg_daily_range_pct < 5.0:
+        volatility_class = "HIGH"
+        suggested_stop_pct = max(7.0, avg_daily_range_pct * 2)  # 2x daily range
+        stop_risk = "RISKY"  # 5% is only 1-1.7x daily range
+    else:
+        volatility_class = "EXTREME"
+        suggested_stop_pct = max(10.0, avg_daily_range_pct * 2)  # 2x daily range
+        stop_risk = "VERY_RISKY"  # 5% likely to trigger on noise
+
+    return {
+        "avg_daily_range_pct": float(round(avg_daily_range_pct, 2)),
+        "volatility_class": volatility_class,
+        "suggested_stop_pct": float(round(suggested_stop_pct, 1)),
+        "stop_risk": stop_risk,
+    }
+
+
 # ============================================================================
 # VOLUME PROFILE (VRVP - Volume Range Visible Price)
 # ============================================================================
@@ -862,6 +907,133 @@ def assess_support_volume_backing(
 
     # Default: outside value area but not near any volume cluster
     return "MODERATE", f"{level_name} ${support_level:,.2f} has moderate volume backing"
+
+
+def assess_stop_aware_entry_quality(
+    current_price,
+    stop_tolerance_pct,
+    s1,
+    s2,
+    s3,
+    s1_quality,
+    s2_quality,
+    s3_quality,
+    d50,
+    d100,
+    d200,
+    poc=None,
+    vah=None,
+    val=None,
+):
+    """
+    Assess entry quality based on supports within stop tolerance range.
+
+    Args:
+        current_price: Current entry price
+        stop_tolerance_pct: Maximum acceptable stop loss % (e.g., 8 for 8%)
+        s1, s2, s3: Support levels
+        s1_quality, s2_quality, s3_quality: Quality ratings for each support
+        d50, d100, d200: Moving averages
+        poc, vah, val: Volume profile levels
+
+    Returns:
+        (entry_quality, entry_flag, entry_note, accessible_supports)
+    """
+    stop_level = current_price * (1 - stop_tolerance_pct / 100)
+
+    # Find all supports within stop range
+    accessible_supports = []
+
+    # Check moving averages
+    if d50 and d50 >= stop_level:
+        accessible_supports.append(("D50", d50, "WEAK"))
+    if d100 and d100 >= stop_level:
+        accessible_supports.append(("D100", d100, "MODERATE"))
+    if d200 and d200 >= stop_level:
+        accessible_supports.append(("D200", d200, "MODERATE"))
+
+    # Check S-levels
+    if s1 and s1 >= stop_level:
+        accessible_supports.append(("S1", s1, s1_quality))
+    if s2 and s2 >= stop_level:
+        accessible_supports.append(("S2", s2, s2_quality))
+    if s3 and s3 >= stop_level:
+        accessible_supports.append(("S3", s3, s3_quality))
+
+    # Check volume profile levels
+    if poc and poc >= stop_level:
+        accessible_supports.append(("POC", poc, "STRONG"))
+
+    # Count quality of accessible supports
+    excellent_count = sum(1 for _, _, q in accessible_supports if q == "EXCELLENT")
+    good_count = sum(1 for _, _, q in accessible_supports if q == "GOOD")
+    moderate_count = sum(
+        1 for _, _, q in accessible_supports if q in ["MODERATE", "OK"]
+    )
+
+    total_count = len(accessible_supports)
+
+    # Determine entry quality based on accessible supports
+    if total_count == 0:
+        entry_quality = "CAUTION"
+        entry_flag = "⚠️ EXTENDED"
+        entry_note = (
+            f"No supports within {stop_tolerance_pct}% stop range (${stop_level:.2f})"
+        )
+
+    elif excellent_count >= 2 or (excellent_count >= 1 and good_count >= 1):
+        entry_quality = "EXCELLENT"
+        entry_flag = "✓ SAFE ENTRY"
+        entry_note = (
+            f"{total_count} supports in range, including {excellent_count} EXCELLENT"
+        )
+
+    elif good_count >= 2 or (good_count >= 1 and moderate_count >= 2):
+        entry_quality = "GOOD"
+        entry_flag = "✓ SAFE ENTRY"
+        entry_note = f"{total_count} supports in range, including {good_count} GOOD"
+
+    elif good_count >= 1 or moderate_count >= 2:
+        entry_quality = "OK"
+        entry_flag = "🎯 ACCEPTABLE"
+        entry_note = f"{total_count} supports in range ({good_count} GOOD, {moderate_count} MODERATE)"
+
+    elif moderate_count >= 1:
+        entry_quality = "CAUTION"
+        entry_flag = "⚠️ THIN"
+        entry_note = f"Only {total_count} support(s) in range - limited protection"
+
+    else:
+        entry_quality = "CAUTION"
+        entry_flag = "⚠️ EXTENDED"
+        entry_note = f"Weak supports only in {stop_tolerance_pct}% range"
+
+    # Check if best supports are out of range but close
+    out_of_range_good = []
+    if s1 and s1 < stop_level and s1_quality in ["EXCELLENT", "GOOD"]:
+        out_of_range_good.append(("S1", s1, s1_quality))
+    if s2 and s2 < stop_level and s2_quality in ["EXCELLENT", "GOOD"]:
+        out_of_range_good.append(("S2", s2, s2_quality))
+    if s3 and s3 < stop_level and s3_quality in ["EXCELLENT", "GOOD"]:
+        out_of_range_good.append(("S3", s3, s3_quality))
+
+    # If good supports exist but are out of range, suggest waiting
+    if out_of_range_good and total_count <= 1:
+        entry_flag = "⏳ WAIT"
+        best_support = out_of_range_good[0]
+        distance_pct = ((current_price - best_support[1]) / current_price) * 100
+        entry_note += f" | {best_support[2]} support at ${best_support[1]:.2f} ({distance_pct:.1f}% down) - wait for pullback"
+
+    # Special case: At ideal support levels
+    if (
+        s1
+        and abs(current_price - s1) / current_price <= 0.02
+        and s1_quality in ["EXCELLENT", "GOOD"]
+    ):
+        entry_flag = "🎯 IDEAL"
+        entry_note = f"At {s1_quality} support S1 (${s1:.2f})"
+
+    return entry_quality, entry_flag, entry_note, accessible_supports
 
 
 def assess_buy_quality(
@@ -1370,6 +1542,9 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             daily, period=20, num_std=2
         )
 
+        # Calculate daily volatility metrics
+        volatility = calculate_daily_volatility(daily, period=20)
+
         # Volume Profile (VRVP)
         vp_60d = calculate_volume_profile(daily, price_bins=60)
         vp_52w = calculate_volume_profile(weekly, price_bins=52)
@@ -1549,6 +1724,33 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             adjust_sell_levels_for_mas(d50, d100, d200, r1, r2, r3, current_price)
         )
 
+        # Calculate stop-aware entry quality (Option 1 + 4: Entry-Relative Quality + Support Within Stop Range)
+        # Use user's maximum stop tolerance (8%) as the standard
+        # This represents the maximum acceptable risk for conservative traders
+        stop_tolerance_pct = 8.0
+
+        (
+            entry_quality,
+            entry_flag,
+            entry_note,
+            accessible_supports,
+        ) = assess_stop_aware_entry_quality(
+            current_price=current_price,
+            stop_tolerance_pct=stop_tolerance_pct,
+            s1=s1,
+            s2=s2,
+            s3=s3,
+            s1_quality=s1_quality[0],
+            s2_quality=s2_quality[0],
+            s3_quality=s3_quality[0],
+            d50=d50,
+            d100=d100,
+            d200=d200,
+            poc=poc_60d,
+            vah=vah_60d,
+            val=val_60d,
+        )
+
         result = {
             "ticker": ticker,
             "signal": signal,
@@ -1572,6 +1774,15 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             "bb_middle": bb_middle,
             "bb_lower": bb_lower,
             "bb_position_sigma": bb_position_sigma,
+            # Volatility metrics
+            "avg_daily_range_pct": (
+                volatility["avg_daily_range_pct"] if volatility else None
+            ),
+            "volatility_class": volatility["volatility_class"] if volatility else None,
+            "suggested_stop_pct": (
+                volatility["suggested_stop_pct"] if volatility else None
+            ),
+            "stop_risk": volatility["stop_risk"] if volatility else None,
             # Volume Profile - 60 day
             "poc_60d": float(poc_60d) if poc_60d is not None else None,
             "vah_60d": float(vah_60d) if vah_60d is not None else None,
@@ -1605,6 +1816,13 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             "adjusted_r2": float(adjusted_r2) if adjusted_r2 is not None else r2,
             "adjusted_r3": float(adjusted_r3) if adjusted_r3 is not None else r3,
             "sell_feasibility_note": sell_feasibility_note,
+            # Stop-aware entry quality (NEW - Options 1 + 4 + Flag System)
+            "entry_quality": entry_quality,
+            "entry_flag": entry_flag,
+            "entry_note": entry_note,
+            "stop_tolerance_pct": stop_tolerance_pct,
+            "stop_level": current_price * (1 - stop_tolerance_pct / 100),
+            "accessible_supports_count": len(accessible_supports),
             "notes": "",
         }
 

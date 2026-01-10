@@ -703,8 +703,8 @@ def create_portfolio_tracker_excel(portfolio_data, output_path):
     ws_tech = wb.create_sheet("Technical Levels")
     tech_headers = [
         "Ticker",
-        "Price",
         "Signal",
+        "Price",
         "RSI",
         "BB_Upper",
         "BB_Middle",
@@ -738,8 +738,8 @@ def create_portfolio_tracker_excel(portfolio_data, output_path):
     row = 2
     for pos in portfolio_data["positions"]:
         ws_tech.cell(row, 1, pos["ticker"])
-        ws_tech.cell(row, 2, pos["current_price"])
-        ws_tech.cell(row, 3, pos["signal"])
+        ws_tech.cell(row, 2, pos["signal"])
+        ws_tech.cell(row, 3, pos["current_price"])
         # RSI and Bollinger Bands
         ws_tech.cell(row, 4, pos.get("rsi"))
         ws_tech.cell(row, 5, pos.get("bb_upper"))
