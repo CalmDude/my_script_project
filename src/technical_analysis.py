@@ -530,6 +530,84 @@ def get_larsson_state(df, fast=15, slow=19, v1len=25, v2len=29):
 
 
 # ============================================================================
+# MOMENTUM & VOLATILITY INDICATORS (RSI & BOLLINGER BANDS)
+# ============================================================================
+
+
+def calculate_rsi(df, period=14):
+    """
+    Calculate RSI (Relative Strength Index).
+
+    Returns: float (current RSI value, 0-100)
+    """
+    if df.empty or len(df) < period + 1:
+        return None
+
+    close = df["Close"]
+    delta = close.diff()
+
+    # Separate gains and losses
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+
+    # Calculate RS and RSI
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+
+    current_rsi = rsi.iloc[-1]
+
+    return float(current_rsi) if not np.isnan(current_rsi) else None
+
+
+def calculate_bollinger_bands(df, period=20, num_std=2):
+    """
+    Calculate Bollinger Bands.
+
+    Returns: tuple (upper_band, middle_band, lower_band, current_position_sigma)
+    - current_position_sigma: how many standard deviations from middle band
+    """
+    if df.empty or len(df) < period:
+        return None, None, None, None
+
+    close = df["Close"]
+
+    # Calculate middle band (SMA)
+    middle_band = close.rolling(window=period).mean()
+
+    # Calculate standard deviation
+    std_dev = close.rolling(window=period).std()
+
+    # Calculate upper and lower bands
+    upper_band = middle_band + (num_std * std_dev)
+    lower_band = middle_band - (num_std * std_dev)
+
+    # Get current values
+    current_price = close.iloc[-1]
+    current_middle = middle_band.iloc[-1]
+    current_upper = upper_band.iloc[-1]
+    current_lower = lower_band.iloc[-1]
+    current_std = std_dev.iloc[-1]
+
+    # Calculate position in sigma units
+    if not np.isnan(current_std) and current_std > 0:
+        bb_position_sigma = (current_price - current_middle) / current_std
+    else:
+        bb_position_sigma = None
+
+    # Return floats or None
+    return (
+        float(current_upper) if not np.isnan(current_upper) else None,
+        float(current_middle) if not np.isnan(current_middle) else None,
+        float(current_lower) if not np.isnan(current_lower) else None,
+        (
+            float(bb_position_sigma)
+            if bb_position_sigma is not None and not np.isnan(bb_position_sigma)
+            else None
+        ),
+    )
+
+
+# ============================================================================
 # VOLUME PROFILE (VRVP - Volume Range Visible Price)
 # ============================================================================
 
@@ -797,13 +875,17 @@ def assess_buy_quality(
     val=None,
     hvn_below=None,
     level_name="S1",
+    rsi=None,
+    bb_lower=None,
+    bb_middle=None,
+    support_level_price=None,
 ):
     """
-    Assess buy quality based on MA positioning + VRVP volume backing.
+    Assess buy quality based on MA positioning + VRVP volume backing + RSI + Bollinger Bands.
     Returns: (quality_rating, quality_note)
 
-    EXCELLENT: All MAs below support + support has strong volume backing
-    GOOD: D100 & D200 below support + support has strong/moderate volume backing
+    EXCELLENT: All MAs below support + strong volume + RSI/BB favorable
+    GOOD: D100 & D200 below support + strong/moderate volume + RSI/BB favorable
     OK: Partial MA support or good MA with only moderate volume backing
     CAUTION: No MA support or support in weak volume zone
     EXTENDED: Price >10% above all MAs or VAH
@@ -847,43 +929,118 @@ def assess_buy_quality(
     # Format MA list for messages
     ma_list_str = ", ".join(mas_below_s1) if mas_below_s1 else "No MAs"
 
-    # Step 4: Combine MA position + Volume backing (following simplified logic tree)
+    # Step 4: Assess RSI and Bollinger Bands positioning
+    rsi_boost = 0
+    bb_boost = 0
+    enhancements = []
+
+    # Use support_level_price if provided, otherwise use current_price for evaluation
+    eval_price = support_level_price if support_level_price is not None else s1
+
+    if rsi is not None:
+        if rsi < 30:
+            rsi_boost = 2  # Strong oversold boost
+            enhancements.append(f"RSI {rsi:.0f} oversold")
+        elif rsi < 40:
+            rsi_boost = 1  # Moderate oversold boost
+            enhancements.append(f"RSI {rsi:.0f} near oversold")
+        elif rsi > 70:
+            rsi_boost = -1  # Overbought penalty
+            enhancements.append(f"RSI {rsi:.0f} overbought")
+
+    if bb_lower is not None and bb_middle is not None:
+        # Check if support level is at or below lower BB
+        if s1 <= bb_lower * 1.02:  # Within 2% of lower band
+            bb_boost = 2  # Strong statistical support
+            pct_below_mid = ((s1 - bb_middle) / bb_middle) * 100
+            enhancements.append(
+                f"{level_name} at/below lower BB ({pct_below_mid:.1f}%)"
+            )
+        elif s1 <= bb_lower * 1.05:  # Within 5% of lower band
+            bb_boost = 1  # Near statistical support
+            enhancements.append(f"{level_name} near lower BB")
+
+    # Step 5: Combine MA position + Volume backing + RSI/BB enhancements
+    base_quality = None
+    base_note = ""
 
     # All MAs below support level?
     if len(mas_below_s1) == 3:
         # Is support near POC/HVN?
         if volume_quality == "STRONG":
-            return "EXCELLENT", f"{ma_list_str} support {level_name} + {volume_note}"
+            base_quality = "EXCELLENT"
+            base_note = f"{ma_list_str} support {level_name} + {volume_note}"
         # Is support in Value Area?
         elif volume_quality == "MODERATE":
-            return "GOOD", f"{ma_list_str} support {level_name} + {volume_note}"
+            base_quality = "GOOD"
+            base_note = f"{ma_list_str} support {level_name} + {volume_note}"
         else:
-            return "OK", f"{ma_list_str} support {level_name} but {volume_note}"
+            base_quality = "OK"
+            base_note = f"{ma_list_str} support {level_name} but {volume_note}"
 
     # D100 & D200 below support level?
-    if "D100" in mas_below_s1 and "D200" in mas_below_s1:
+    elif "D100" in mas_below_s1 and "D200" in mas_below_s1:
         # Support volume quality?
         if volume_quality in ["STRONG", "MODERATE"]:
-            return "GOOD", f"D100, D200 support {level_name} + {volume_note}"
+            base_quality = "GOOD"
+            base_note = f"D100, D200 support {level_name} + {volume_note}"
         else:  # Weak
-            return "OK", f"D100, D200 support {level_name} but {volume_note}"
+            base_quality = "OK"
+            base_note = f"D100, D200 support {level_name} but {volume_note}"
 
     # Some MA support?
-    if len(mas_below_s1) >= 1:
+    elif len(mas_below_s1) >= 1:
         # Support volume quality?
         if volume_quality == "WEAK":
-            return (
-                "CAUTION",
-                f"{ma_list_str} support {level_name} but {volume_note}",
-            )
+            base_quality = "CAUTION"
+            base_note = f"{ma_list_str} support {level_name} but {volume_note}"
         else:
-            return (
-                "OK",
-                f"{ma_list_str} support {level_name}, {volume_note}",
-            )
+            base_quality = "OK"
+            base_note = f"{ma_list_str} support {level_name}, {volume_note}"
 
     # No MA support + weak support
-    return "CAUTION", f"No MA support + {volume_note}"
+    else:
+        base_quality = "CAUTION"
+        base_note = f"No MA support + {volume_note}"
+
+    # Apply RSI/BB boost to upgrade quality
+    total_boost = rsi_boost + bb_boost
+
+    quality_levels = ["CAUTION", "OK", "GOOD", "EXCELLENT"]
+    current_level_idx = (
+        quality_levels.index(base_quality) if base_quality in quality_levels else 0
+    )
+
+    # Apply boost
+    if total_boost >= 3:
+        # Strong boost: upgrade by 2 levels
+        new_level_idx = min(current_level_idx + 2, len(quality_levels) - 1)
+    elif total_boost >= 2:
+        # Moderate boost: upgrade by 1 level
+        new_level_idx = min(current_level_idx + 1, len(quality_levels) - 1)
+    elif total_boost == 1:
+        # Small boost: upgrade if OK -> GOOD
+        new_level_idx = (
+            min(current_level_idx + 1, len(quality_levels) - 1)
+            if base_quality == "OK"
+            else current_level_idx
+        )
+    elif total_boost <= -1:
+        # Penalty: downgrade by 1 level
+        new_level_idx = max(current_level_idx - 1, 0)
+    else:
+        new_level_idx = current_level_idx
+
+    final_quality = quality_levels[new_level_idx]
+
+    # Build final note
+    if enhancements:
+        enhancement_str = " + " + ", ".join(enhancements)
+        final_note = base_note + enhancement_str
+    else:
+        final_note = base_note
+
+    return final_quality, final_note
 
 
 def assess_resistance_volume_backing(
@@ -965,13 +1122,17 @@ def assess_sell_quality(
     val=None,
     hvn_above=None,
     level_name="R1",
+    rsi=None,
+    bb_upper=None,
+    bb_middle=None,
+    resistance_level_price=None,
 ):
     """
-    Assess sell quality based on MA positioning + VRVP volume resistance.
+    Assess sell quality based on MA positioning + VRVP volume resistance + RSI + Bollinger Bands.
     Returns: (quality_rating, quality_note)
 
-    EXCELLENT: All MAs above resistance + resistance has strong volume (strong ceiling)
-    GOOD: D100 & D200 above resistance + resistance has strong/moderate volume
+    EXCELLENT: All MAs above resistance + strong volume + RSI/BB favorable
+    GOOD: D100 & D200 above resistance + strong/moderate volume + RSI/BB favorable
     OK: Partial MA resistance or good MA with only moderate volume
     CAUTION: No MA resistance or resistance in weak volume zone
     MISSED: Price already above resistance level
@@ -1008,33 +1169,114 @@ def assess_sell_quality(
     # Format MA list for messages
     ma_list_str = ", ".join(mas_above_r) if mas_above_r else "No MAs"
 
-    # Step 4: Combine MA resistance + Volume backing
+    # Step 4: Assess RSI and Bollinger Bands positioning
+    rsi_boost = 0
+    bb_boost = 0
+    enhancements = []
+
+    # Use resistance_level_price if provided, otherwise use current_price for evaluation
+    eval_price = resistance_level_price if resistance_level_price is not None else r1
+
+    if rsi is not None:
+        if rsi > 70:
+            rsi_boost = 2  # Strong overbought boost (good for selling)
+            enhancements.append(f"RSI {rsi:.0f} overbought")
+        elif rsi > 60:
+            rsi_boost = 1  # Moderate overbought boost
+            enhancements.append(f"RSI {rsi:.0f} elevated")
+        elif rsi < 30:
+            rsi_boost = -1  # Oversold penalty (may rally further)
+            enhancements.append(f"RSI {rsi:.0f} oversold")
+
+    if bb_upper is not None and bb_middle is not None:
+        # Check if resistance level is at or above upper BB
+        if r1 >= bb_upper * 0.98:  # Within 2% of upper band
+            bb_boost = 2  # Strong statistical resistance
+            pct_above_mid = ((r1 - bb_middle) / bb_middle) * 100
+            enhancements.append(
+                f"{level_name} at/above upper BB (+{pct_above_mid:.1f}%)"
+            )
+        elif r1 >= bb_upper * 0.95:  # Within 5% of upper band
+            bb_boost = 1  # Near statistical resistance
+            enhancements.append(f"{level_name} near upper BB")
+
+    # Step 5: Combine MA resistance + Volume backing + RSI/BB enhancements
+    base_quality = None
+    base_note = ""
 
     # All MAs above resistance (strong ceiling)
     if len(mas_above_r) == 3:
         if volume_quality == "STRONG":
-            return "EXCELLENT", f"{ma_list_str} block {level_name} + {volume_note}"
+            base_quality = "EXCELLENT"
+            base_note = f"{ma_list_str} block {level_name} + {volume_note}"
         elif volume_quality == "MODERATE":
-            return "GOOD", f"{ma_list_str} block {level_name} + {volume_note}"
+            base_quality = "GOOD"
+            base_note = f"{ma_list_str} block {level_name} + {volume_note}"
         else:
-            return "OK", f"{ma_list_str} block {level_name} but {volume_note}"
+            base_quality = "OK"
+            base_note = f"{ma_list_str} block {level_name} but {volume_note}"
 
     # D100 & D200 above resistance
-    if "D100" in mas_above_r and "D200" in mas_above_r:
+    elif "D100" in mas_above_r and "D200" in mas_above_r:
         if volume_quality in ["STRONG", "MODERATE"]:
-            return "GOOD", f"D100, D200 block {level_name} + {volume_note}"
+            base_quality = "GOOD"
+            base_note = f"D100, D200 block {level_name} + {volume_note}"
         else:
-            return "OK", f"D100, D200 block {level_name} but {volume_note}"
+            base_quality = "OK"
+            base_note = f"D100, D200 block {level_name} but {volume_note}"
 
     # Some MA resistance
-    if len(mas_above_r) >= 1:
+    elif len(mas_above_r) >= 1:
         if volume_quality == "WEAK":
-            return "CAUTION", f"{ma_list_str} block {level_name} but {volume_note}"
+            base_quality = "CAUTION"
+            base_note = f"{ma_list_str} block {level_name} but {volume_note}"
         else:
-            return "OK", f"{ma_list_str} block {level_name}, {volume_note}"
+            base_quality = "OK"
+            base_note = f"{ma_list_str} block {level_name}, {volume_note}"
 
     # No MA resistance - might break through easily
-    return "CAUTION", f"No MA resistance above {level_name} + {volume_note}"
+    else:
+        base_quality = "CAUTION"
+        base_note = f"No MA resistance above {level_name} + {volume_note}"
+
+    # Apply RSI/BB boost to upgrade quality
+    total_boost = rsi_boost + bb_boost
+
+    quality_levels = ["CAUTION", "OK", "GOOD", "EXCELLENT"]
+    current_level_idx = (
+        quality_levels.index(base_quality) if base_quality in quality_levels else 0
+    )
+
+    # Apply boost
+    if total_boost >= 3:
+        # Strong boost: upgrade by 2 levels
+        new_level_idx = min(current_level_idx + 2, len(quality_levels) - 1)
+    elif total_boost >= 2:
+        # Moderate boost: upgrade by 1 level
+        new_level_idx = min(current_level_idx + 1, len(quality_levels) - 1)
+    elif total_boost == 1:
+        # Small boost: upgrade if OK -> GOOD
+        new_level_idx = (
+            min(current_level_idx + 1, len(quality_levels) - 1)
+            if base_quality == "OK"
+            else current_level_idx
+        )
+    elif total_boost <= -1:
+        # Penalty: downgrade by 1 level
+        new_level_idx = max(current_level_idx - 1, 0)
+    else:
+        new_level_idx = current_level_idx
+
+    final_quality = quality_levels[new_level_idx]
+
+    # Build final note
+    if enhancements:
+        enhancement_str = " + " + ", ".join(enhancements)
+        final_note = base_note + enhancement_str
+    else:
+        final_note = base_note
+
+    return final_quality, final_note
 
 
 def adjust_sell_levels_for_mas(d50, d100, d200, r1, r2, r3, current_price):
@@ -1122,6 +1364,12 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             daily["Close"].rolling(200).mean().iloc[-1] if len(daily) >= 200 else None
         )
 
+        # Calculate RSI and Bollinger Bands
+        rsi = calculate_rsi(daily, period=14)
+        bb_upper, bb_middle, bb_lower, bb_position_sigma = calculate_bollinger_bands(
+            daily, period=20, num_std=2
+        )
+
         # Volume Profile (VRVP)
         vp_60d = calculate_volume_profile(daily, price_bins=60)
         vp_52w = calculate_volume_profile(weekly, price_bins=52)
@@ -1196,7 +1444,7 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
         r2 = float(daily_resistances[1]) if not pd.isna(daily_resistances[1]) else None
         r3 = float(daily_resistances[2]) if not pd.isna(daily_resistances[2]) else None
 
-        # Assess buy quality for each support level (MA confluence + VRVP volume backing)
+        # Assess buy quality for each support level (MA confluence + VRVP volume backing + RSI + BB)
         s1_quality = assess_buy_quality(
             d50,
             d100,
@@ -1208,6 +1456,10 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             val=val_60d,
             hvn_below=hvn_below_60d,
             level_name="S1",
+            rsi=rsi,
+            bb_lower=bb_lower,
+            bb_middle=bb_middle,
+            support_level_price=s1,
         )
         s2_quality = assess_buy_quality(
             d50,
@@ -1220,6 +1472,10 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             val=val_60d,
             hvn_below=hvn_below_60d,
             level_name="S2",
+            rsi=rsi,
+            bb_lower=bb_lower,
+            bb_middle=bb_middle,
+            support_level_price=s2,
         )
         s3_quality = assess_buy_quality(
             d50,
@@ -1232,9 +1488,13 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             val=val_60d,
             hvn_below=hvn_below_60d,
             level_name="S3",
+            rsi=rsi,
+            bb_lower=bb_lower,
+            bb_middle=bb_middle,
+            support_level_price=s3,
         )
 
-        # Assess sell quality for each resistance level (MA resistance + VRVP volume ceiling)
+        # Assess sell quality for each resistance level (MA resistance + VRVP volume ceiling + RSI + BB)
         r1_quality = assess_sell_quality(
             d50,
             d100,
@@ -1246,6 +1506,10 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             val=val_60d,
             hvn_above=hvn_above_60d,
             level_name="R1",
+            rsi=rsi,
+            bb_upper=bb_upper,
+            bb_middle=bb_middle,
+            resistance_level_price=r1,
         )
         r2_quality = assess_sell_quality(
             d50,
@@ -1258,6 +1522,10 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             val=val_60d,
             hvn_above=hvn_above_60d,
             level_name="R2",
+            rsi=rsi,
+            bb_upper=bb_upper,
+            bb_middle=bb_middle,
+            resistance_level_price=r2,
         )
         r3_quality = assess_sell_quality(
             d50,
@@ -1270,6 +1538,10 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             val=val_60d,
             hvn_above=hvn_above_60d,
             level_name="R3",
+            rsi=rsi,
+            bb_upper=bb_upper,
+            bb_middle=bb_middle,
+            resistance_level_price=r3,
         )
 
         # Adjust sell levels for MA resistance
@@ -1294,6 +1566,12 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             "d50": float(d50) if d50 is not None and not pd.isna(d50) else None,
             "d100": float(d100) if d100 is not None and not pd.isna(d100) else None,
             "d200": float(d200) if d200 is not None and not pd.isna(d200) else None,
+            # RSI and Bollinger Bands
+            "rsi": rsi,
+            "bb_upper": bb_upper,
+            "bb_middle": bb_middle,
+            "bb_lower": bb_lower,
+            "bb_position_sigma": bb_position_sigma,
             # Volume Profile - 60 day
             "poc_60d": float(poc_60d) if poc_60d is not None else None,
             "vah_60d": float(vah_60d) if vah_60d is not None else None,

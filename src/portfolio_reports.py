@@ -627,6 +627,10 @@ def create_portfolio_tracker_excel(portfolio_data, output_path):
         "Ticker",
         "Price",
         "Signal",
+        "RSI",
+        "BB_Upper",
+        "BB_Middle",
+        "BB_Lower",
         "D50",
         "D100",
         "D200",
@@ -658,24 +662,30 @@ def create_portfolio_tracker_excel(portfolio_data, output_path):
         ws_tech.cell(row, 1, pos["ticker"])
         ws_tech.cell(row, 2, pos["current_price"])
         ws_tech.cell(row, 3, pos["signal"])
-        ws_tech.cell(row, 4, pos.get("d50"))
-        ws_tech.cell(row, 5, pos.get("d100"))
-        ws_tech.cell(row, 6, pos.get("d200"))
+        # RSI and Bollinger Bands
+        ws_tech.cell(row, 4, pos.get("rsi"))
+        ws_tech.cell(row, 5, pos.get("bb_upper"))
+        ws_tech.cell(row, 6, pos.get("bb_middle"))
+        ws_tech.cell(row, 7, pos.get("bb_lower"))
+        # Moving Averages
+        ws_tech.cell(row, 8, pos.get("d50"))
+        ws_tech.cell(row, 9, pos.get("d100"))
+        ws_tech.cell(row, 10, pos.get("d200"))
         # VRVP 60-day data
-        ws_tech.cell(row, 7, pos.get("poc_60d"))
-        ws_tech.cell(row, 8, pos.get("vah_60d"))
-        ws_tech.cell(row, 9, pos.get("val_60d"))
-        ws_tech.cell(row, 10, pos.get("hvn_above_60d"))
-        ws_tech.cell(row, 11, pos.get("hvn_below_60d"))
-        ws_tech.cell(row, 12, pos.get("lvn_above_60d"))
-        ws_tech.cell(row, 13, pos.get("lvn_below_60d"))
+        ws_tech.cell(row, 11, pos.get("poc_60d"))
+        ws_tech.cell(row, 12, pos.get("vah_60d"))
+        ws_tech.cell(row, 13, pos.get("val_60d"))
+        ws_tech.cell(row, 14, pos.get("hvn_above_60d"))
+        ws_tech.cell(row, 15, pos.get("hvn_below_60d"))
+        ws_tech.cell(row, 16, pos.get("lvn_above_60d"))
+        ws_tech.cell(row, 17, pos.get("lvn_below_60d"))
         # Support/Resistance
-        ws_tech.cell(row, 14, pos.get("s1"))
-        ws_tech.cell(row, 15, pos.get("s2"))
-        ws_tech.cell(row, 16, pos.get("s3"))
-        ws_tech.cell(row, 17, pos.get("r1"))
-        ws_tech.cell(row, 18, pos.get("r2"))
-        ws_tech.cell(row, 19, pos.get("r3"))
+        ws_tech.cell(row, 18, pos.get("s1"))
+        ws_tech.cell(row, 19, pos.get("s2"))
+        ws_tech.cell(row, 20, pos.get("s3"))
+        ws_tech.cell(row, 21, pos.get("r1"))
+        ws_tech.cell(row, 22, pos.get("r2"))
+        ws_tech.cell(row, 23, pos.get("r3"))
         row += 1
 
     # Auto-size columns
@@ -722,22 +732,43 @@ def cleanup_old_reports(results_dir, max_files=3, archive_retention_days=90):
     )
 
     # Move files beyond max_files to archive
+    skipped_files = []
+
     for old_file in pdf_files[max_files:]:
         archive_path = archive_dir / old_file.name
-        old_file.rename(archive_path)
-        print(f"  📦 Archived: {old_file.name}")
-        total_archived += 1
+        try:
+            old_file.rename(archive_path)
+            print(f"  📦 Archived: {old_file.name}")
+            total_archived += 1
+        except PermissionError:
+            skipped_files.append(old_file.name)
+        except Exception as e:
+            logger.warning(f"Could not archive {old_file.name}: {e}")
+            print(f"  ⚠️  Could not archive {old_file.name}: {e}")
 
     for old_file in xlsx_files[max_files:]:
         archive_path = archive_dir / old_file.name
-        old_file.rename(archive_path)
-        print(f"  📦 Archived: {old_file.name}")
-        total_archived += 1
+        try:
+            old_file.rename(archive_path)
+            print(f"  📦 Archived: {old_file.name}")
+            total_archived += 1
+        except PermissionError:
+            skipped_files.append(old_file.name)
+        except Exception as e:
+            logger.warning(f"Could not archive {old_file.name}: {e}")
+            print(f"  ⚠️  Could not archive {old_file.name}: {e}")
 
     if total_archived > 0:
         print(f"  ✅ Archived {total_archived} file(s), kept {max_files} most recent")
     else:
         print(f"  ✅ No files to archive (only {max_files} or fewer exist)")
+
+    if skipped_files:
+        print(
+            f"  ⚠️  Skipped {len(skipped_files)} file(s) - close Excel/PDF viewer and run again:"
+        )
+        for filename in skipped_files:
+            print(f"     • {filename}")
 
     # Delete archive files older than retention period
     cutoff_time = time.time() - (archive_retention_days * 86400)
