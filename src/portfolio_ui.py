@@ -84,11 +84,21 @@ def log_transaction(trans_type, ticker, quantity, price, notes=""):
 
 
 def get_current_price(ticker):
-    """Fetch current price for a ticker"""
+    """Fetch current price for a ticker (with cache bypass)"""
     try:
+        # Create new ticker instance to avoid caching
         stock = yf.Ticker(ticker)
-        return stock.history(period="1d")["Close"].iloc[-1]
-    except:
+        # Try to get most recent data
+        hist = stock.history(period="5d")  # Use 5d to ensure we get data
+        if not hist.empty:
+            latest_price = hist["Close"].iloc[-1]
+            latest_date = hist.index[-1]
+            # Debug: show what we fetched
+            # st.write(f"DEBUG {ticker}: ${latest_price:.2f} from {latest_date.date()}")
+            return latest_price
+        return None
+    except Exception as e:
+        st.warning(f"Failed to fetch {ticker} price: {str(e)}")
         return None
 
 
@@ -132,6 +142,13 @@ with tab1:
             "Purchase Price ($)", min_value=0.0, step=0.01, format="%.2f"
         )
         date = st.date_input("Purchase Date", datetime.now())
+
+    # Notes field
+    notes = st.text_input(
+        "Notes (optional)",
+        placeholder="e.g., Buying the dip, Adding to position, etc.",
+        help="Add custom notes to track why you made this trade",
+    )
 
     # Get current price button
     if ticker:
@@ -182,7 +199,10 @@ with tab1:
                     df.loc[idx, "last_updated"] = date.strftime("%Y-%m-%d")
 
                     # Log transaction
-                    log_transaction("BUY", ticker, quantity, price, f"Updated position")
+                    transaction_note = (
+                        f"Updated position. {notes}" if notes else "Updated position"
+                    )
+                    log_transaction("BUY", ticker, quantity, price, transaction_note)
 
                     st.success(f"✅ Updated {ticker} position!")
                     st.info(
@@ -206,7 +226,10 @@ with tab1:
                     df = pd.concat([df, new_row], ignore_index=True)
 
                     # Log transaction
-                    log_transaction("BUY", ticker, quantity, price, f"New position")
+                    transaction_note = (
+                        f"New position. {notes}" if notes else "New position"
+                    )
+                    log_transaction("BUY", ticker, quantity, price, transaction_note)
 
                     st.success(f"✅ Added new position: {ticker}")
                     st.info(f"**{quantity:,.4f} shares @ ${price:,.2f}**")
@@ -266,6 +289,14 @@ with tab2:
                     "Sell Price ($)", min_value=0.0, step=0.01, format="%.2f"
                 )
                 sell_date = st.date_input("Sell Date", datetime.now(), key="sell_date")
+
+            # Notes field
+            sell_notes = st.text_input(
+                "Notes (optional)",
+                key="sell_notes",
+                placeholder="e.g., Taking profits, Rebalancing, Stop loss, etc.",
+                help="Add custom notes to track why you made this trade",
+            )
 
             # Get current price button
             if sell_ticker:
@@ -346,12 +377,16 @@ with tab2:
                         )
 
                         # Log transaction
+                        pnl_note = f"Realized P/L: ${realized_gain:,.2f} ({realized_gain_pct:+.2f}%)"
+                        transaction_note = (
+                            f"{pnl_note}. {sell_notes}" if sell_notes else pnl_note
+                        )
                         log_transaction(
                             "SELL",
                             sell_ticker,
                             sell_quantity,
                             sell_price,
-                            f"Realized P/L: ${realized_gain:,.2f} ({realized_gain_pct:+.2f}%)",
+                            transaction_note,
                         )
 
                         # Save
@@ -496,10 +531,20 @@ with tab4:
 
         if len(active_holdings) > 0:
             # Get current prices
+            price_errors = []
             with st.spinner("Fetching current prices..."):
                 for idx, row in active_holdings.iterrows():
                     price = get_current_price(row["ticker"])
-                    active_holdings.loc[idx, "current_price"] = price if price else 0
+                    if price and price > 0:
+                        active_holdings.loc[idx, "current_price"] = price
+                    else:
+                        price_errors.append(row["ticker"])
+                        active_holdings.loc[idx, "current_price"] = 0
+
+            if price_errors:
+                st.error(
+                    f"⚠️ Failed to fetch prices for: {', '.join(price_errors)}. Click 'Refresh Data' or check your internet connection."
+                )
 
             active_holdings["market_value"] = (
                 active_holdings["quantity"] * active_holdings["current_price"]
@@ -612,8 +657,27 @@ with tab4:
                     labels={"gain_loss_pct": "Return %", "ticker": "Ticker"},
                     color="gain_loss_pct",
                     color_continuous_scale=["red", "yellow", "green"],
+                    color_continuous_midpoint=0,  # Fix: Set midpoint at 0% so negative=red, positive=green
+                    hover_data={
+                        "current_price": ":.2f",
+                        "avg_cost": ":.2f",
+                        "gain_loss_pct": ":.2f",
+                    },
                 )
                 st.plotly_chart(fig_perf, use_container_width=True)
+
+                # Show price details table
+                st.caption("Price Details:")
+                price_details = active_holdings[
+                    ["ticker", "current_price", "avg_cost", "gain_loss_pct"]
+                ].copy()
+                price_details.columns = [
+                    "Ticker",
+                    "Current Price",
+                    "Avg Cost",
+                    "Return %",
+                ]
+                st.dataframe(price_details, hide_index=True)
 
             # Transaction history chart if available
             st.markdown("---")

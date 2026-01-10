@@ -23,7 +23,7 @@ if (-not (Test-Path ".venv\Scripts\python.exe")) {
 }
 
 # Check if streamlit is installed
-$streamlitCheck = & ".venv\Scripts\python.exe" -c "import streamlit" 2>&1
+& ".venv\Scripts\python.exe" -c "import streamlit" 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] Streamlit not installed!" -ForegroundColor Red
     Write-Host "   Installing streamlit..." -ForegroundColor Yellow

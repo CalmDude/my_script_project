@@ -411,11 +411,11 @@ def create_portfolio_tracker_excel(portfolio_data, output_path):
     cash_available = summary.get("cash_available", total_value - current_holdings)
     cash_pct = (cash_available / total_value * 100) if total_value > 0 else 0
 
-    ws_trade_log.cell(1, 1, "TRADE LOG - Manual Entry").font = Font(bold=True, size=14)
+    ws_trade_log.cell(1, 1, "TRADE LOG").font = Font(bold=True, size=14)
     ws_trade_log.cell(
         2,
         1,
-        "Record executed trades here. This sheet starts empty - add rows as you make trades.",
+        "Trade history from Portfolio Manager UI. Use http://localhost:8501 to add/edit trades (run: .\\scripts\\start_ui.ps1)",
     )
     ws_trade_log.cell(2, 1).font = Font(italic=True, color="666666")
 
@@ -437,7 +437,73 @@ def create_portfolio_tracker_excel(portfolio_data, output_path):
         cell.font = header_font
         cell.alignment = center_align
 
-    # Leave empty for manual entry
+    # Load and populate from transactions.csv
+    from pathlib import Path
+
+    transactions_file = Path(__file__).parent.parent / "data" / "transactions.csv"
+
+    if transactions_file.exists():
+        try:
+            transactions_df = pd.read_csv(transactions_file)
+            # Filter out empty rows
+            transactions_df = transactions_df.dropna(
+                subset=["date", "ticker"], how="all"
+            )
+
+            # Sort by date descending (most recent first)
+            if not transactions_df.empty and "date" in transactions_df.columns:
+                transactions_df["date"] = pd.to_datetime(
+                    transactions_df["date"], errors="coerce"
+                )
+                transactions_df = transactions_df.sort_values("date", ascending=False)
+
+                # Populate trade log
+                row = 5
+                for _, txn in transactions_df.iterrows():
+                    ws_trade_log.cell(
+                        row,
+                        1,
+                        (
+                            txn.get("date").strftime("%Y-%m-%d")
+                            if pd.notna(txn.get("date"))
+                            else ""
+                        ),
+                    )
+                    ws_trade_log.cell(row, 2, txn.get("ticker", ""))
+                    ws_trade_log.cell(
+                        row, 3, str(txn.get("type", "")).upper()
+                    )  # BUY/SELL
+                    ws_trade_log.cell(
+                        row,
+                        4,
+                        (
+                            f"${txn.get('price', 0):,.2f}"
+                            if pd.notna(txn.get("price"))
+                            else ""
+                        ),
+                    )
+                    ws_trade_log.cell(
+                        row,
+                        5,
+                        (
+                            f"{txn.get('quantity', 0):,.4f}"
+                            if pd.notna(txn.get("quantity"))
+                            else ""
+                        ),
+                    )
+                    ws_trade_log.cell(
+                        row,
+                        6,
+                        (
+                            f"${txn.get('total_value', 0):,.2f}"
+                            if pd.notna(txn.get("total_value"))
+                            else ""
+                        ),
+                    )
+                    ws_trade_log.cell(row, 7, txn.get("notes", ""))
+                    row += 1
+        except Exception as e:
+            logger.warning(f"Could not load transactions.csv: {e}")
 
     # Auto-size columns
     for col in ws_trade_log.columns:
