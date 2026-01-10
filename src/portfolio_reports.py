@@ -649,8 +649,8 @@ def create_portfolio_tracker_excel(portfolio_data, output_path):
         "Target$",
         "Gap$",
         "Action",
-        "Buy Quality",
-        "Buy Quality Note",
+        "Quality",
+        "Quality Note",
     ]
 
     for col_num, header in enumerate(pos_headers, 1):
@@ -674,9 +674,21 @@ def create_portfolio_tracker_excel(portfolio_data, output_path):
             row, 6, pos.get("target_pct", 0) * portfolio_data["portfolio_total"]
         )
         ws_positions.cell(row, 7, pos.get("gap_value", 0))
-        ws_positions.cell(row, 8, pos.get("action", "HOLD"))
-        ws_positions.cell(row, 9, pos.get("buy_quality", "N/A"))
-        ws_positions.cell(row, 10, pos.get("buy_quality_note", ""))
+
+        # Determine action and quality based on signal
+        action = pos.get("action", "HOLD")
+        ws_positions.cell(row, 8, action)
+
+        # Show sell quality for SELL actions, buy quality otherwise
+        if action == "SELL":
+            quality = pos.get("r1_quality", "N/A")
+            quality_note = pos.get("r1_quality_note", "")
+        else:
+            quality = pos.get("buy_quality", "N/A")
+            quality_note = pos.get("buy_quality_note", "")
+
+        ws_positions.cell(row, 9, quality)
+        ws_positions.cell(row, 10, quality_note)
         row += 1
 
     # Auto-size columns
