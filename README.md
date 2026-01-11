@@ -10,6 +10,7 @@ A comprehensive technical analysis tool for portfolio management using the Larss
 - **Larsson Signal System**: 9-state decision table combining macro (weekly) and short-term (daily) trends
 - **Portfolio Analysis**: Complete workflow from data load to report generation with position management
 - **Market Scanner**: Scan S&P 500, NASDAQ 100, or custom watchlists for FULL HOLD + ADD signals
+- **Historical Backtesting**: Generate synthetic historical reports and measure your trading edge
 - **Professional Reports**: PDF trading playbooks and Excel trackers with detailed entry/exit zones
 - **24-Hour Caching**: Intelligent rate limiting to prevent Yahoo Finance API throttling
 
@@ -25,11 +26,15 @@ portfolio_analyser/
 │   ├── stocks.txt               # Portfolio watchlist
 │   └── targets.csv              # Target allocations
 ├── docs/                         # Documentation
+│   ├── BEST_TRADES_GUIDE.md     # Best trades report guide
+│   ├── FULL_SCANNER_USER_MANUAL.md # Scanner documentation
+│   ├── HISTORICAL_BACKTESTING.md # Backtesting guide
 │   ├── INTERACTIVE.md           # Notebook usage guide
 │   └── SECURITY.md              # Security best practices
 ├── notebooks/                    # Jupyter notebooks
 │   ├── portfolio_analysis.ipynb # Main portfolio analysis
-│   └── full_scanner.ipynb       # Market scanner
+│   ├── full_scanner.ipynb       # Market scanner
+│   └── backtest_best_trades.ipynb # Backtesting notebook
 ├── scripts/                      # Automation utilities
 │   ├── backup_and_push.ps1      # Git backup automation
 │   ├── install_precommit.ps1    # Pre-commit hook setup
@@ -40,6 +45,8 @@ portfolio_analyser/
 │   ├── technical_analysis.py    # Core analysis engine
 │   ├── portfolio_reports.py     # PDF & Excel generation
 │   ├── full_scanner.py          # Market scanner
+│   ├── backtest_best_trades.py  # Backtesting engine
+│   ├── generate_historical_reports.py # Historical simulation
 │   └── run_portfolio_analysis.py # Automation runner
 ├── tests/                        # Unit tests
 │   └── test_analyze_ticker.py
@@ -136,8 +143,11 @@ Outputs filtered Excel and PDF reports with only FULL HOLD + ADD signals.
 
 ## Documentation
 
-- `docs/INTERACTIVE.md` - Detailed notebook usage guide
-- `docs/SECURITY.md` - Best practices for protecting sensitive data
+- [docs/HISTORICAL_BACKTESTING.md](docs/HISTORICAL_BACKTESTING.md) - **Start here to backtest your trading edge**
+- [docs/BEST_TRADES_GUIDE.md](docs/BEST_TRADES_GUIDE.md) - Understanding best trades reports
+- [docs/FULL_SCANNER_USER_MANUAL.md](docs/FULL_SCANNER_USER_MANUAL.md) - Scanner details and usage
+- [docs/INTERACTIVE.md](docs/INTERACTIVE.md) - Detailed notebook usage guide
+- [docs/SECURITY.md](docs/SECURITY.md) - Best practices for protecting sensitive data
 
 ## Git Workflow (Optional)
 

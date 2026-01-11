@@ -1,4 +1,4 @@
-"""
+﻿"""
 S&P 500 Scanner - Find stocks with FULL HOLD + ADD signal
 Scans all S&P 500 stocks for strongest bullish alignment (weekly P1 + daily P1)
 Only outputs stocks with "FULL HOLD + ADD" signal
@@ -28,6 +28,201 @@ from reportlab.platypus import (
     KeepTogether,
 )
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+
+def safe_print(text):
+    """Print text with fallback for Windows console encoding issues"""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        # Remove emojis and special characters for Windows console
+        import re
+
+        # Remove emoji patterns
+        clean_text = re.sub(
+            r"[\U0001F300-\U0001F9FF\u2600-\u26FF\u2700-\u27BF]", "", text
+        )
+        print(clean_text)
+
+
+def determine_regime_tier(signal, weekly_state, daily_state):
+    """
+    Determine market regime tier based on QQQ Larsson signal.
+
+    Tier Logic:
+    - GREEN (FULL HOLD + ADD): Trade normally, EXCELLENT/GOOD quality
+    - YELLOW (HOLD, SCALE IN): Ultra-selective, EXCELLENT + SAFE ENTRY + 3:1+ Vol R:R only
+    - ORANGE (HOLD MOST + REDUCE, LIGHT/CASH): No new buys, portfolio exits only
+    - RED (REDUCE, CASH, FULL CASH/DEFEND): No new buys, portfolio exits only
+
+    Args:
+        signal: QQQ Larsson signal
+        weekly_state: Weekly trend state (P1/P2/N1/N2)
+        daily_state: Daily trend state (P1/P2/N1/N2)
+
+    Returns:
+        dict with tier, color, emoji, message, allow_buys
+    """
+    signal_upper = signal.upper()
+
+    # GREEN LIGHT: Full bullish alignment
+    if signal_upper == "FULL HOLD + ADD":
+        return {
+            "tier": "GREEN",
+            "color": "green",
+            "emoji": "🟢",
+            "message": "FULL BULL MARKET - Trade normally",
+            "allow_buys": True,
+            "filter_mode": "normal",  # EXCELLENT, GOOD quality
+        }
+
+    # YELLOW LIGHT: Constructive but selective
+    elif signal_upper in ["HOLD", "SCALE IN"]:
+        return {
+            "tier": "YELLOW",
+            "color": "yellow",
+            "emoji": "🟡",
+            "message": "SELECTIVE MARKET - EXCELLENT + SAFE ENTRY + 3:1+ Vol R:R only",
+            "allow_buys": True,
+            "filter_mode": "strict",  # EXCELLENT + SAFE ENTRY + 3:1+ only
+        }
+
+    # ORANGE LIGHT: Deteriorating but not full defense
+    elif signal_upper in ["HOLD MOST + REDUCE", "LIGHT / CASH"]:
+        return {
+            "tier": "ORANGE",
+            "color": "orange",
+            "emoji": "🟠",
+            "message": "RISK OFF - No new buys, exits only",
+            "allow_buys": False,
+            "filter_mode": "exits_only",
+        }
+
+    # RED LIGHT: Full defensive mode
+    elif signal_upper in ["REDUCE", "CASH", "FULL CASH / DEFEND"]:
+        return {
+            "tier": "RED",
+            "color": "red",
+            "emoji": "🔴",
+            "message": "BEAR MARKET - No new buys, preserve capital",
+            "allow_buys": False,
+            "filter_mode": "exits_only",
+        }
+
+    # Unknown signal - default to ORANGE (cautious)
+    else:
+        return {
+            "tier": "ORANGE",
+            "color": "orange",
+            "emoji": "⚠️",
+            "message": f"UNKNOWN SIGNAL: {signal} - Defaulting to cautious mode",
+            "allow_buys": False,
+            "filter_mode": "exits_only",
+        }
+
+
+def analyze_market_regime(daily_bars=60, weekly_bars=52, as_of_date=None):
+    """
+    Analyze QQQ (NASDAQ 100 ETF) to determine market regime.
+
+    This is MANDATORY and runs before all stock scanning.
+    The regime determines what trades are allowed:
+    - GREEN: Normal trading
+    - YELLOW: Ultra-selective (EXCELLENT + SAFE ENTRY + 3:1+ only)
+    - ORANGE/RED: No new buys, exits only
+
+    Args:
+        daily_bars: Number of daily bars for analysis
+        weekly_bars: Number of weekly bars for analysis
+        as_of_date: Optional historical date for backtesting
+
+    Returns:
+        dict with regime info (tier, signal, states, emoji, message, etc.)
+    """
+    print("\n" + "=" * 80)
+    print("MARKET REGIME ANALYSIS (QQQ - NASDAQ 100 ETF)")
+    print("=" * 80)
+
+    try:
+        # Analyze QQQ using same technical analysis
+        qqq_result = analyze_ticker("QQQ", daily_bars, weekly_bars, as_of_date)
+
+        if "error" in qqq_result:
+            print(f"⚠️  WARNING: Could not analyze QQQ: {qqq_result['error']}")
+            print("⚠️  DEFAULTING TO ORANGE (CAUTIOUS) - No new buys allowed")
+            return {
+                "tier": "ORANGE",
+                "signal": "ERROR",
+                "weekly_state": "N/A",
+                "daily_state": "N/A",
+                "color": "orange",
+                "emoji": "⚠️",
+                "message": "QQQ analysis failed - Defaulting to cautious mode",
+                "allow_buys": False,
+                "filter_mode": "exits_only",
+                "qqq_price": None,
+                "qqq_rsi": None,
+            }
+
+        # Extract signal and states
+        signal = qqq_result.get("signal", "UNKNOWN")
+        weekly_state = qqq_result.get("weekly_state", "N/A")
+        daily_state = qqq_result.get("daily_state", "N/A")
+        qqq_price = qqq_result.get("current_price", None)
+        qqq_rsi = qqq_result.get("rsi", None)
+
+        # Determine regime tier
+        regime = determine_regime_tier(signal, weekly_state, daily_state)
+
+        # Add QQQ-specific info
+        regime["signal"] = signal
+        regime["weekly_state"] = weekly_state
+        regime["daily_state"] = daily_state
+        regime["qqq_price"] = qqq_price
+        regime["qqq_rsi"] = qqq_rsi
+
+        # Display regime (with Windows console fallback)
+        try:
+            print(f"\n{regime['emoji']} MARKET REGIME: {regime['tier']}")
+            print(f"   QQQ Signal: {signal}")
+            print(f"   Weekly State: {weekly_state} | Daily State: {daily_state}")
+            print(
+                f"   QQQ Price: ${qqq_price:.2f} | RSI: {qqq_rsi:.1f}"
+                if qqq_price and qqq_rsi
+                else ""
+            )
+            print(f"\n   {regime['message']}")
+        except UnicodeEncodeError:
+            # Windows console fallback - skip emojis
+            print(f"\nMARKET REGIME: {regime['tier']}")
+            print(f"   QQQ Signal: {signal}")
+            print(f"   Weekly State: {weekly_state} | Daily State: {daily_state}")
+            print(
+                f"   QQQ Price: ${qqq_price:.2f} | RSI: {qqq_rsi:.1f}"
+                if qqq_price and qqq_rsi
+                else ""
+            )
+            print(f"\n   {regime['message']}")
+        print("=" * 80 + "\n")
+
+        return regime
+
+    except Exception as e:
+        print(f"⚠️  ERROR analyzing QQQ: {str(e)}")
+        print("⚠️  DEFAULTING TO ORANGE (CAUTIOUS) - No new buys allowed")
+        return {
+            "tier": "ORANGE",
+            "signal": "ERROR",
+            "weekly_state": "N/A",
+            "daily_state": "N/A",
+            "color": "orange",
+            "emoji": "⚠️",
+            "message": f"QQQ analysis error: {str(e)}",
+            "allow_buys": False,
+            "filter_mode": "exits_only",
+            "qqq_price": None,
+            "qqq_rsi": None,
+        }
 
 
 def get_score_grade(score):
@@ -249,7 +444,13 @@ def get_portfolio_tickers():
 
 
 def scan_stocks(
-    tickers, category="stocks", daily_bars=60, weekly_bars=52, concurrency=2
+    tickers,
+    category="stocks",
+    daily_bars=60,
+    weekly_bars=52,
+    concurrency=2,
+    as_of_date=None,
+    regime=None,
 ):
     """
     Scan a list of stocks for buy opportunities
@@ -260,6 +461,8 @@ def scan_stocks(
         daily_bars: Number of daily bars to analyze
         weekly_bars: Number of weekly bars to analyze
         concurrency: Number of concurrent API requests (default 2 to avoid rate limits)
+        as_of_date: Optional date string (YYYY-MM-DD) for historical simulation
+        regime: Market regime dict from analyze_market_regime() (optional but recommended)
 
     Returns:
         DataFrame with results sorted by signal strength
@@ -270,6 +473,13 @@ def scan_stocks(
     completed = 0
     rate_limit_errors = 0  # Track rate limit hits
 
+    # Display regime context if provided
+    if regime:
+        safe_print(
+            f"{regime['emoji']} MARKET REGIME: {regime['tier']} - {regime['message']}"
+        )
+        print("=" * 80)
+
     print(f"[SCAN] Scanning {total} {category} stocks for 'FULL HOLD + ADD' signals...")
     print(
         f"Parameters: {daily_bars} daily bars, {weekly_bars} weekly bars, {concurrency} threads"
@@ -279,7 +489,9 @@ def scan_stocks(
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         # Submit all jobs
         future_to_ticker = {
-            executor.submit(analyze_ticker, ticker, daily_bars, weekly_bars): ticker
+            executor.submit(
+                analyze_ticker, ticker, daily_bars, weekly_bars, as_of_date
+            ): ticker
             for ticker in tickers
         }
 
@@ -362,22 +574,46 @@ def scan_stocks(
 
 
 def filter_buy_signals(
-    df, signal="FULL HOLD + ADD", quality_filter=True, use_entry_quality=True
+    df,
+    signal="FULL HOLD + ADD",
+    quality_filter=True,
+    use_entry_quality=True,
+    regime=None,
 ):
     """
-    Filter for FULL HOLD + ADD signals (strongest bullish alignment)
+    Filter for FULL HOLD + ADD signals with regime-aware quality filtering.
+
+    Regime filtering modes:
+    - GREEN: Normal filtering (EXCELLENT, GOOD, OK quality)
+    - YELLOW: Strict filtering (EXCELLENT + SAFE ENTRY + Vol R:R >= 3.0 only)
+    - ORANGE/RED: Returns empty DataFrame (no new buys allowed)
 
     Args:
         df: DataFrame with scan results
         signal: Signal to filter for (default: 'FULL HOLD + ADD')
-        quality_filter: If True, only include EXCELLENT/GOOD/OK quality (exclude EXTENDED/WEAK)
+        quality_filter: If True, apply quality filtering based on regime
         use_entry_quality: If True, use entry_quality (stop-aware) instead of buy_quality
+        regime: Market regime dict from analyze_market_regime() (mandatory)
 
     Returns:
         Filtered DataFrame sorted by ticker
     """
     if df.empty:
         return df
+
+    # MANDATORY REGIME CHECK
+    if regime is None:
+        raise ValueError(
+            "ERROR: regime parameter is MANDATORY. Must call analyze_market_regime() first."
+        )
+
+    # ORANGE/RED: No new buys allowed
+    if not regime["allow_buys"]:
+        safe_print(
+            f"\\n{regime['emoji']} REGIME FILTER: {regime['tier']} - No new buy signals will be shown"
+        )
+        print(f"   Market is in {regime['tier']} mode: {regime['message']}")
+        return pd.DataFrame()  # Return empty DataFrame
 
     # Filter by signal
     filtered = df[df["signal"] == signal].copy()
@@ -399,17 +635,48 @@ def filter_buy_signals(
                 "This should never happen - signal classification is broken!"
             )
 
-    # Optionally filter by quality
-    if quality_filter:
-        # Use entry_quality (stop-aware) if available, otherwise fall back to buy_quality
-        if use_entry_quality and "entry_quality" in filtered.columns:
-            filtered = filtered[
-                filtered["entry_quality"].isin(["EXCELLENT", "GOOD", "OK"])
-            ]
-        elif "buy_quality" in filtered.columns:
-            filtered = filtered[
-                filtered["buy_quality"].isin(["EXCELLENT", "GOOD", "OK"])
-            ]
+    # Apply regime-based filtering
+    if quality_filter and not filtered.empty:
+        filter_mode = regime.get("filter_mode", "normal")
+
+        # GREEN: Normal filtering (EXCELLENT, GOOD, OK)
+        if filter_mode == "normal":
+            if use_entry_quality and "entry_quality" in filtered.columns:
+                filtered = filtered[
+                    filtered["entry_quality"].isin(["EXCELLENT", "GOOD", "OK"])
+                ]
+            elif "buy_quality" in filtered.columns:
+                filtered = filtered[
+                    filtered["buy_quality"].isin(["EXCELLENT", "GOOD", "OK"])
+                ]
+            safe_print(
+                f"\\n{regime['emoji']} REGIME FILTER: GREEN - Normal filtering (EXCELLENT, GOOD, OK quality)"
+            )
+
+        # YELLOW: Ultra-strict filtering (EXCELLENT + SAFE ENTRY + 3:1+ Vol R:R only)
+        elif filter_mode == "strict":
+            # Must have EXCELLENT entry quality
+            if use_entry_quality and "entry_quality" in filtered.columns:
+                filtered = filtered[filtered["entry_quality"] == "EXCELLENT"]
+            elif "buy_quality" in filtered.columns:
+                filtered = filtered[filtered["buy_quality"] == "EXCELLENT"]
+
+            # Must have SAFE ENTRY flag
+            if "entry_flag" in filtered.columns:
+                filtered = filtered[
+                    filtered["entry_flag"].str.contains(
+                        "SAFE ENTRY", case=False, na=False
+                    )
+                ]
+
+            # Must have Vol R:R >= 3.0
+            if "vol_rr" in filtered.columns:
+                filtered = filtered[filtered["vol_rr"] >= 3.0]
+
+            safe_print(
+                f"\\n{regime['emoji']} REGIME FILTER: YELLOW - Ultra-strict (EXCELLENT + SAFE ENTRY + 3:1+ Vol R:R only)"
+            )
+            print(f"   Market is selective: Only highest-quality setups allowed")
 
     return filtered.sort_values("ticker")
 
@@ -522,13 +789,13 @@ def cleanup_old_scans(results_dir, max_files=1, archive_retention_days=60):
             for old_file in files[max_files:]:
                 archive_path = cat_archive_dir / old_file.name
                 old_file.rename(archive_path)
-                print(f"  📦 Archived ({cat_name}): {old_file.name}")
+                print(f"  [ARCHIVED] ({cat_name}): {old_file.name}")
                 total_archived += 1
 
     if total_archived > 0:
-        print(f"  ✅ Archived {total_archived} file(s), kept {max_files} most recent")
+        print(f"  [OK] Archived {total_archived} file(s), kept {max_files} most recent")
     else:
-        print(f"  ✅ No files to archive (only {max_files} most recent exist)")
+        print(f"  [OK] No files to archive (only {max_files} most recent exist)")
 
     # Delete archive files older than retention period
     cutoff_time = time.time() - (
@@ -548,11 +815,11 @@ def cleanup_old_scans(results_dir, max_files=1, archive_retention_days=60):
                         archive_file.unlink()
                         deleted_count += 1
                     except Exception as e:
-                        print(f"  ⚠️  Could not delete {archive_file.name}: {e}")
+                        print(f"  [WARNING] Could not delete {archive_file.name}: {e}")
 
     if deleted_count > 0:
         print(
-            f"  🗑️  Deleted {deleted_count} archive file(s) older than {archive_retention_days} days"
+            f"  [DELETED] {deleted_count} archive file(s) older than {archive_retention_days} days"
         )
 
 
@@ -1335,7 +1602,9 @@ def create_portfolio_excel(all_df, output_file, category="Portfolio"):
     print(f"  - CASH: {len(df_cash)} stocks")
 
 
-def create_pdf_report(buy_df, sell_df, output_file, timestamp_str, category=""):
+def create_pdf_report(
+    buy_df, sell_df, output_file, timestamp_str, category="", regime=None
+):
     """
     Create comprehensive PDF trading report matching portfolio_reports format.
     Adapted for scanner (no holdings/targets data)
@@ -1346,6 +1615,7 @@ def create_pdf_report(buy_df, sell_df, output_file, timestamp_str, category=""):
         output_file: Path to output PDF file
         timestamp_str: Timestamp string for report header
         category: Category label (e.g., 'S&P 500', 'NASDAQ 100')
+        regime: Market regime dict from analyze_market_regime() (optional, for display)
     """
     from reportlab.lib.pagesizes import letter
     from reportlab.lib import colors
@@ -1408,6 +1678,27 @@ def create_pdf_report(buy_df, sell_df, output_file, timestamp_str, category=""):
     cover_title = f"Trading Playbook - {report_title}<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
     elements.append(Paragraph(cover_title, title_style))
     elements.append(Spacer(1, 0.3 * inch))
+
+    # Market Regime Banner (if provided)
+    if regime:
+        regime_color = {
+            "GREEN": "#27ae60",  # green
+            "YELLOW": "#f39c12",  # yellow/orange
+            "ORANGE": "#e67e22",  # orange
+            "RED": "#c0392b",  # red
+        }.get(
+            regime["tier"], "#95a5a6"
+        )  # gray default
+
+        regime_banner = f"""
+        <para align=center bgcolor='{regime_color}' textColor='white'>
+        <b><font size=14>{regime['emoji']} MARKET REGIME: {regime['tier']}</font></b><br/>
+        <font size=11>QQQ Signal: {regime['signal']} | Weekly: {regime['weekly_state']} | Daily: {regime['daily_state']}</font><br/>
+        <font size=10>{regime['message']}</font>
+        </para>
+        """
+        elements.append(Paragraph(regime_banner, styles["Normal"]))
+        elements.append(Spacer(1, 0.2 * inch))
 
     # Scanner summary
     summary_text = f"""
@@ -1808,7 +2099,7 @@ def create_pdf_report(buy_df, sell_df, output_file, timestamp_str, category=""):
     print(f"[OK] PDF report created: {output_file}")
 
 
-def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
+def create_best_trades_pdf(buy_df, sell_df, output_file, category="", regime=None):
     """
     Create PDF with ranked best trading opportunities
 
@@ -1817,6 +2108,7 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
         sell_df: DataFrame with sell opportunities
         output_file: Path to save PDF file
         category: Label (e.g., 'S&P 500', 'NASDAQ 100')
+        regime: Market regime dict from analyze_market_regime() (optional, for display)
     """
     from reportlab.lib.pagesizes import letter
     from reportlab.lib import colors
@@ -1867,6 +2159,27 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
     cover_title = f"Best Trading Setups<br/>{report_title}<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
     elements.append(Paragraph(cover_title, title_style))
     elements.append(Spacer(1, 0.3 * inch))
+
+    # Market Regime Banner (if provided)
+    if regime:
+        regime_color = {
+            "GREEN": "#27ae60",  # green
+            "YELLOW": "#f39c12",  # yellow/orange
+            "ORANGE": "#e67e22",  # orange
+            "RED": "#c0392b",  # red
+        }.get(
+            regime["tier"], "#95a5a6"
+        )  # gray default
+
+        regime_banner = f"""
+        <para align=center bgcolor='{regime_color}' textColor='white'>
+        <b><font size=14>{regime['emoji']} MARKET REGIME: {regime['tier']}</font></b><br/>
+        <font size=11>QQQ: {regime['signal']} | {regime['weekly_state']} / {regime['daily_state']}</font><br/>
+        <font size=10>{regime['message']}</font>
+        </para>
+        """
+        elements.append(Paragraph(regime_banner, styles["Normal"]))
+        elements.append(Spacer(1, 0.2 * inch))
 
     # Calculate Vol R:R and rank - OPTION 1 approach
     buy_scored = buy_df.copy() if not buy_df.empty else pd.DataFrame()
@@ -2190,6 +2503,14 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
 if __name__ == "__main__":
     import argparse
     from pathlib import Path
+    import sys
+
+    # Fix Windows console encoding for emojis
+    if sys.platform == "win32":
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except:
+            pass  # Fallback to default encoding
 
     parser = argparse.ArgumentParser(
         description="Scan stocks for FULL HOLD + ADD signals"
@@ -2206,6 +2527,12 @@ if __name__ == "__main__":
         default=2,
         help="Threads (default: 2, higher values risk rate limiting)",
     )
+    parser.add_argument(
+        "--as-of-date",
+        type=str,
+        default=None,
+        help="Historical date for simulation (YYYY-MM-DD format)",
+    )
 
     args = parser.parse_args()
 
@@ -2215,6 +2542,13 @@ if __name__ == "__main__":
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
     overall_start = datetime.now()
+
+    # === REGIME ANALYSIS (MANDATORY) ===
+    regime = analyze_market_regime(
+        daily_bars=args.daily_bars,
+        weekly_bars=args.weekly_bars,
+        as_of_date=args.as_of_date,
+    )
 
     # === SCAN 1: S&P 500 ===
     print("\n" + "=" * 80)
@@ -2232,14 +2566,16 @@ if __name__ == "__main__":
         daily_bars=args.daily_bars,
         weekly_bars=args.weekly_bars,
         concurrency=args.concurrency,
+        as_of_date=args.as_of_date,
+        regime=regime,
     )
     sp500_elapsed = (datetime.now() - start_time).total_seconds()
 
     if not sp500_results.empty:
-        sp500_buy = filter_buy_signals(sp500_results, "FULL HOLD + ADD")
+        sp500_buy = filter_buy_signals(sp500_results, "FULL HOLD + ADD", regime=regime)
         sp500_sell = filter_sell_signals(sp500_results)
-        print(f"\nðŸŽ¯ S&P 500: {len(sp500_buy)} FULL HOLD + ADD signals found")
-        print(f"âš ï¸ S&P 500: {len(sp500_sell)} bearish signals found")
+        print(f"\n🎯 S&P 500: {len(sp500_buy)} FULL HOLD + ADD signals found")
+        print(f"⚠️ S&P 500: {len(sp500_sell)} bearish signals found")
 
         if not sp500_buy.empty or not sp500_sell.empty:
             # Save S&P 500 results
@@ -2286,11 +2622,15 @@ if __name__ == "__main__":
         daily_bars=args.daily_bars,
         weekly_bars=args.weekly_bars,
         concurrency=args.concurrency,
+        as_of_date=args.as_of_date,
+        regime=regime,
     )
     nasdaq100_elapsed = (datetime.now() - start_time).total_seconds()
 
     if not nasdaq100_results.empty:
-        nasdaq100_buy = filter_buy_signals(nasdaq100_results, "FULL HOLD + ADD")
+        nasdaq100_buy = filter_buy_signals(
+            nasdaq100_results, "FULL HOLD + ADD", regime=regime
+        )
         nasdaq100_sell = filter_sell_signals(nasdaq100_results)
         print(f"\nðŸŽ¯ NASDAQ 100: {len(nasdaq100_buy)} FULL HOLD + ADD signals found")
         print(f"âš ï¸ NASDAQ 100: {len(nasdaq100_sell)} bearish signals found")
@@ -2309,6 +2649,7 @@ if __name__ == "__main__":
                 pdf_path,
                 timestamp,
                 category="NASDAQ 100",
+                regime=regime,
             )
 
             print(f"  âœ“ Excel: {xlsx_path.name}")
@@ -2323,7 +2664,11 @@ if __name__ == "__main__":
                 nasdaq100_buy, nasdaq100_sell, best_trades_xlsx, category="NASDAQ 100"
             )
             create_best_trades_pdf(
-                nasdaq100_buy, nasdaq100_sell, best_trades_pdf, category="NASDAQ 100"
+                nasdaq100_buy,
+                nasdaq100_sell,
+                best_trades_pdf,
+                category="NASDAQ 100",
+                regime=regime,
             )
 
             print(f"  âœ“ PDF: {pdf_path.name}")
@@ -2347,6 +2692,8 @@ if __name__ == "__main__":
             daily_bars=args.daily_bars,
             weekly_bars=args.weekly_bars,
             concurrency=args.concurrency,
+            as_of_date=args.as_of_date,
+            regime=regime,
         )
         portfolio_elapsed = (datetime.now() - start_time).total_seconds()
 
@@ -2358,7 +2705,9 @@ if __name__ == "__main__":
             )
 
             # Count FULL HOLD + ADD for display
-            portfolio_buy = filter_buy_signals(portfolio_results, "FULL HOLD + ADD")
+            portfolio_buy = filter_buy_signals(
+                portfolio_results, "FULL HOLD + ADD", regime=regime
+            )
             print(f"  - {len(portfolio_buy)} with FULL HOLD + ADD signal")
 
             # Save ALL portfolio results (not filtered)
@@ -2376,6 +2725,7 @@ if __name__ == "__main__":
                     pdf_path,
                     timestamp,
                     category="Portfolio",
+                    regime=regime,
                 )
 
             print(f"  âœ“ Excel: {xlsx_path.name}")
@@ -2393,14 +2743,16 @@ if __name__ == "__main__":
     print(f"\nðŸ“Š Results by Category:")
 
     if not sp500_results.empty:
-        sp500_buy_count = len(filter_buy_signals(sp500_results, "FULL HOLD + ADD"))
+        sp500_buy_count = len(
+            filter_buy_signals(sp500_results, "FULL HOLD + ADD", regime=regime)
+        )
         print(
             f"  S&P 500:     {sp500_buy_count:3d} FULL HOLD + ADD signals ({sp500_elapsed:.1f}s)"
         )
 
     if not nasdaq100_results.empty:
         nasdaq100_buy_count = len(
-            filter_buy_signals(nasdaq100_results, "FULL HOLD + ADD")
+            filter_buy_signals(nasdaq100_results, "FULL HOLD + ADD", regime=regime)
         )
         print(
             f"  NASDAQ 100:  {nasdaq100_buy_count:3d} FULL HOLD + ADD signals ({nasdaq100_elapsed:.1f}s)"
@@ -2408,7 +2760,7 @@ if __name__ == "__main__":
 
     if portfolio_tickers and not portfolio_results.empty:
         portfolio_buy_count = len(
-            filter_buy_signals(portfolio_results, "FULL HOLD + ADD")
+            filter_buy_signals(portfolio_results, "FULL HOLD + ADD", regime=regime)
         )
         print(
             f"  Portfolio:   {portfolio_buy_count:3d} FULL HOLD + ADD signals ({portfolio_elapsed:.1f}s)"

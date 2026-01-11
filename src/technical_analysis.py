@@ -1611,41 +1611,67 @@ def adjust_sell_levels_for_mas(d50, d100, d200, r1, r2, r3, current_price):
     return adjusted_r1, adjusted_r2, adjusted_r3, feasibility_note
 
 
-def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
-    """Fetch data and compute indicators for a single ticker. Returns a dict with results."""
+def analyze_ticker(ticker, daily_bars=60, weekly_bars=52, as_of_date=None):
+    """Fetch data and compute indicators for a single ticker. Returns a dict with results.
+
+    Args:
+        ticker: Stock ticker symbol
+        daily_bars: Number of daily bars to analyze (default 60)
+        weekly_bars: Number of weekly bars to analyze (default 52)
+        as_of_date: Optional datetime or date string (YYYY-MM-DD) to limit data to historical point
+                    If provided, only data up to this date will be used (for backtesting)
+    """
     ticker = ticker.upper()
 
-    # Check cache first
-    cached_result = _load_from_cache(ticker, daily_bars, weekly_bars)
-    if cached_result is not None:
-        return cached_result
+    # Skip cache for historical backtesting (as_of_date provided)
+    # Cache only applies to live/current data
+    if as_of_date is None:
+        cached_result = _load_from_cache(ticker, daily_bars, weekly_bars)
+        if cached_result is not None:
+            return cached_result
 
     # Add delay before making API request to avoid rate limiting
     _smart_delay()
 
     try:
         stock = yf.Ticker(ticker)
-        info = stock.info
 
-        # Check for rate limit indicators
-        if not info or len(info) == 0:
-            return {"ticker": ticker, "error": "rate_limit_possible"}
+        # Handle as_of_date for historical simulation
+        if as_of_date:
+            if isinstance(as_of_date, str):
+                end_date = datetime.strptime(as_of_date, "%Y-%m-%d")
+            else:
+                end_date = as_of_date
+            today = end_date.strftime("%Y-%m-%d")
+        else:
+            end_date = datetime.now()
+            today = end_date.strftime("%Y-%m-%d")
 
-        current_price = (
-            info.get("regularMarketPrice")
-            or info.get("preMarketPrice")
-            or info.get("previousClose")
-        )
-        price_note = "pre-market" if "preMarketPrice" in info else "last close"
-        today = datetime.now().strftime("%Y-%m-%d")
-
-        # Daily data
-        daily = stock.history(period="3y")
+        # Daily data - fetch up to end_date
+        daily = stock.history(period="3y", end=end_date)
         if daily.empty:
             return {"ticker": ticker, "error": "no daily data"}
 
-        # Weekly data
-        weekly = stock.history(period="10y", interval="1wk")
+        # For historical backtesting, use the close price at as_of_date
+        # For live data, use current market price from info
+        if as_of_date:
+            current_price = float(daily["Close"].iloc[-1])
+            price_note = f"close as of {today}"
+        else:
+            info = stock.info
+            # Check for rate limit indicators
+            if not info or len(info) == 0:
+                return {"ticker": ticker, "error": "rate_limit_possible"}
+
+            current_price = (
+                info.get("regularMarketPrice")
+                or info.get("preMarketPrice")
+                or info.get("previousClose")
+            )
+            price_note = "pre-market" if "preMarketPrice" in info else "last close"
+
+        # Weekly data - fetch up to end_date
+        weekly = stock.history(period="10y", interval="1wk", end=end_date)
         if weekly.empty:
             return {"ticker": ticker, "error": "no weekly data"}
 
@@ -2010,8 +2036,9 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             "notes": "",
         }
 
-        # Save to cache
-        _save_to_cache(ticker, daily_bars, weekly_bars, result)
+        # Save to cache only for live data (not historical backtesting)
+        if as_of_date is None:
+            _save_to_cache(ticker, daily_bars, weekly_bars, result)
 
         return result
     except Exception as e:
