@@ -1939,7 +1939,7 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
     <b>Best Trading Setups - Volatility-Based Ranking</b><br/>
     <br/>
     <b>Buy Setups:</b> {len(buy_scored)} EXCELLENT/GOOD entry quality (stop-aware) setups<br/>
-    <b>Short Opportunities:</b> {len(sell_scored)} EXCELLENT/GOOD short entry quality (stop-aware) setups<br/>
+    <b>Sell Setups:</b> {len(sell_scored)} EXCELLENT/GOOD short entry quality (stop-aware) setups<br/>
     <br/>
     <b>Selection Criteria:</b><br/>
     • <b>Quality Filter (Buys):</b> Only EXCELLENT or GOOD entry quality (supports within 8% stop tolerance)<br/>
