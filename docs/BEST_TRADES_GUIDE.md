@@ -387,12 +387,15 @@ Uses recent price action, more relevant than old S1
 
 **From Report**:
 ```
-#1. MRVL - Score: 79/100 | R/R: 1:9.3
-Price: $83.22
-Support S1: $81.12 (GOOD quality) - 2.5% away
-Target R1: $102.70 (+23.4%)
-RSI: 47.1
-Signal: FULL HOLD + ADD
+#1. MRVL - $83.22 | GOOD ✓ SAFE ENTRY | Vol R:R: 3.1:1
+RSI: 47.1 | Signal: FULL HOLD + ADD
+
+Volatility Stop (7.5%): $76.98 loss = -7.5%
+8% Stop Tolerance: $76.56 | Accessible Supports: 4 within range
+Target R1: $102.70 gain = +23.4%
+
+Support S1: $81.12 (2.5% away) | Volatility: HIGH (~3.75% daily range)
+4 supports in range, including 2 GOOD
 ```
 
 **Optimized Stop Strategy**:

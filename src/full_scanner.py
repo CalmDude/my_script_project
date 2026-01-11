@@ -1938,12 +1938,12 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
     summary_text = f"""
     <b>Best Trading Setups - Volatility-Based Ranking</b><br/>
     <br/>
-    <b>Buy Setups:</b> {len(buy_scored)} EXCELLENT/GOOD entry quality (stop-aware) setups<br/>
-    <b>Sell Setups:</b> {len(sell_scored)} EXCELLENT/GOOD short entry quality (stop-aware) setups<br/>
+    <b>Buy Setups:</b> {len(buy_scored)} EXCELLENT/GOOD quality (stop-aware) setups<br/>
+    <b>Sell Setups:</b> {len(sell_scored)} EXCELLENT/GOOD quality (stop-aware) setups<br/>
     <br/>
     <b>Selection Criteria:</b><br/>
-    • <b>Quality Filter (Buys):</b> Only EXCELLENT or GOOD entry quality (supports within 8% stop tolerance)<br/>
-    • <b>Quality Filter (Shorts):</b> Only EXCELLENT or GOOD short entry quality (resistances above 8% stop tolerance)<br/>
+    • <b>Quality Filter (Buys):</b> Only EXCELLENT or GOOD quality (supports within 8% stop tolerance)<br/>
+    • <b>Quality Filter (Shorts):</b> Only EXCELLENT or GOOD quality (resistances above 8% stop tolerance)<br/>
     • <b>Ranking:</b> Sorted by Vol R:R (Volatility Risk/Reward Ratio) - highest first<br/>
     <br/>
     <b>What is Vol R:R?</b><br/>
@@ -1958,7 +1958,74 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
     <i>Focus on higher Vol R:R setups (2:1 or better) for optimal risk-adjusted returns.</i>
     """
     elements.append(Paragraph(summary_text, styles["Normal"]))
-    elements.append(Spacer(1, 0.3 * inch))
+
+    # === GLOSSARY OF TERMS (moved to start) ===
+    elements.append(Paragraph("GLOSSARY OF TERMS", section_style))
+
+    glossary_items = [
+        ("<b>Quality Ratings:</b>", ""),
+        (
+            "  • <b>EXCELLENT:</b>",
+            "2+ strong supports accessible within stop tolerance. Safest entries.",
+        ),
+        (
+            "  • <b>GOOD:</b>",
+            "1+ good support accessible within stop tolerance. Solid risk management.",
+        ),
+        (
+            "  • <b>OK:</b>",
+            "Moderate supports available. Acceptable but watch closely.",
+        ),
+        (
+            "  • <b>CAUTION:</b>",
+            "Thin or extended. Limited protection within stop range.",
+        ),
+        ("", ""),
+        ("<b>Quality Flags:</b>", ""),
+        (
+            "  • <b>SAFE ENTRY:</b>",
+            "Multiple excellent supports protect your stop level.",
+        ),
+        ("  • <b>IDEAL:</b>", "Near major support with good upside potential."),
+        ("  • <b>ACCEPTABLE:</b>", "Reasonable entry but monitor risk carefully."),
+        ("  • <b>THIN:</b>", "Limited support structure. Higher risk."),
+        ("  • <b>EXTENDED:</b>", "Far from supports. Consider waiting for pullback."),
+        ("  • <b>WAIT:</b>", "No accessible supports within 8% stop. Do not enter."),
+        ("", ""),
+        (
+            "<b>Vol R:R (Volatility Risk-Reward):</b>",
+            "Ratio of potential gain to volatility stop risk. 3+ = excellent, 2+ = good, 1+ = acceptable.",
+        ),
+        (
+            "<b>Volatility Stop:</b>",
+            "Stop-loss based on stock's price movement (typically 5-8%). Limits maximum loss.",
+        ),
+        (
+            "<b>Stop Tolerance:</b>",
+            "Maximum acceptable stop distance (8%). Entries are rated based on supports within this range.",
+        ),
+        (
+            "<b>RSI:</b>",
+            "Relative Strength Index (0-100). <30 oversold, >70 overbought.",
+        ),
+        ("<b>S1/R1:</b>", "Primary support and resistance levels. Key price targets."),
+        (
+            "<b>D50/D100/D200:</b>",
+            "50/100/200-day moving averages. Trend and support indicators.",
+        ),
+    ]
+
+    for term, definition in glossary_items:
+        if term and definition:
+            elements.append(Paragraph(f"{term} {definition}", styles["Normal"]))
+            elements.append(Spacer(1, 0.04 * inch))
+        elif term and not definition:
+            elements.append(Paragraph(term, styles["Normal"]))
+            elements.append(Spacer(1, 0.03 * inch))
+        else:
+            elements.append(Spacer(1, 0.06 * inch))
+
+    elements.append(PageBreak())
 
     # === TOP BUY SETUPS ===
     if not buy_scored.empty:
@@ -2114,74 +2181,6 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
                 "No EXCELLENT/GOOD quality sell opportunities found.", styles["Normal"]
             )
         )
-
-    # Glossary Section
-    elements.append(PageBreak())
-    elements.append(Paragraph("GLOSSARY OF TERMS", section_style))
-    elements.append(Spacer(1, 0.1 * inch))
-
-    glossary_items = [
-        ("<b>Entry Quality Ratings:</b>", ""),
-        (
-            "  • <b>EXCELLENT:</b>",
-            "2+ strong supports accessible within stop tolerance. Safest entries.",
-        ),
-        (
-            "  • <b>GOOD:</b>",
-            "1+ good support accessible within stop tolerance. Solid risk management.",
-        ),
-        (
-            "  • <b>OK:</b>",
-            "Moderate supports available. Acceptable but watch closely.",
-        ),
-        (
-            "  • <b>CAUTION:</b>",
-            "Thin or extended. Limited protection within stop range.",
-        ),
-        ("", ""),
-        ("<b>Entry Flags:</b>", ""),
-        (
-            "  • <b>SAFE ENTRY:</b>",
-            "Multiple excellent supports protect your stop level.",
-        ),
-        ("  • <b>IDEAL:</b>", "Near major support with good upside potential."),
-        ("  • <b>ACCEPTABLE:</b>", "Reasonable entry but monitor risk carefully."),
-        ("  • <b>THIN:</b>", "Limited support structure. Higher risk."),
-        ("  • <b>EXTENDED:</b>", "Far from supports. Consider waiting for pullback."),
-        ("  • <b>WAIT:</b>", "No accessible supports within 8% stop. Do not enter."),
-        ("", ""),
-        (
-            "<b>Vol R:R (Volatility Risk-Reward):</b>",
-            "Ratio of potential gain to volatility stop risk. 3+ = excellent, 2+ = good, 1+ = acceptable.",
-        ),
-        (
-            "<b>Volatility Stop:</b>",
-            "Stop-loss based on stock's price movement (typically 5-8%). Limits maximum loss.",
-        ),
-        (
-            "<b>Stop Tolerance:</b>",
-            "Maximum acceptable stop distance (8%). Entries are rated based on supports within this range.",
-        ),
-        (
-            "<b>RSI:</b>",
-            "Relative Strength Index (0-100). <30 oversold, >70 overbought.",
-        ),
-        ("<b>S1/R1:</b>", "Primary support and resistance levels. Key price targets."),
-        (
-            "<b>D50/D100/D200:</b>",
-            "50/100/200-day moving averages. Trend and support indicators.",
-        ),
-    ]
-
-    for term, definition in glossary_items:
-        if term and definition:
-            elements.append(Paragraph(f"{term} {definition}", styles["Normal"]))
-            elements.append(Spacer(1, 0.08 * inch))
-        elif term and not definition:
-            elements.append(Paragraph(term, styles["Normal"]))
-            elements.append(Spacer(1, 0.05 * inch))
-        else:
-            elements.append(Spacer(1, 0.1 * inch))
 
     # Build PDF
     doc.build(elements)

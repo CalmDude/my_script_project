@@ -195,32 +195,35 @@ Shows category and date.
 
 **Ranking Summary Table:**
 ```
-Rank | Ticker | Entry Quality      | Vol R:R | Price   | Signal
------|--------|-------------------|---------|---------|------------------
-1    | ABNB   | EXCELLENT ✓ SAFE  | 1:3.5   | $177.78 | FULL HOLD + ADD
-2    | AMGN   | EXCELLENT ✓ SAFE  | 1:3.2   | $326.10 | FULL HOLD + ADD
-3    | AFL    | GOOD 🎯 IDEAL     | 1:2.8   | $109.24 | FULL HOLD + ADD
+Rank | Ticker | Quality    | Quality Flag | Vol R:R | Price   | Signal
+-----|--------|------------|--------------|---------|---------|------------------
+1    | ABNB   | EXCELLENT  | ✓ SAFE ENTRY | 3.5:1   | $177.78 | FULL HOLD + ADD
+2    | AMGN   | EXCELLENT  | ✓ SAFE ENTRY | 3.2:1   | $326.10 | FULL HOLD + ADD
+3    | AFL    | GOOD       | 🎯 IDEAL     | 2.8:1   | $109.24 | FULL HOLD + ADD
 ```
 
 **Detailed Cards:**
 Each stock gets a card with:
 
 ```
-#1. ABNB - EXCELLENT ✓ SAFE ENTRY | Vol R:R: 1:3.5
-Current Price: $177.78 | RSI: 45.2 | Signal: FULL HOLD + ADD
+#1. ABNB - $177.78 | EXCELLENT ✓ SAFE ENTRY | Vol R:R: 3.5:1
+RSI: 45.2 | Signal: FULL HOLD + ADD
 
 Volatility Stop (7.5%): $164.45 loss = -7.5%
-Target S1: $159.24 gain = +15.2%
+8% Stop Tolerance: $163.56 | Accessible Supports: 3 within range
+Target R1: $208.40 gain = +17.2%
 
-Resistance R1: $185.40 (4.3% away) | Volatility: Moderate (~2.5% daily range)
+Support S1: $170.12 (4.3% away) | Volatility: Moderate (~2.5% daily range)
 ```
 
 **What This Tells You:**
-- **Entry Quality + Flag**: Overall assessment and risk level
-- **Vol R:R 1:3.5**: For every $1 you risk, you could gain $3.50 (excellent)
-- **Volatility Stop**: Where to place your stop loss
-- **Target S1**: Your first profit target
-- **R1 Distance**: How close you are to hitting resistance
+- **Quality + Quality Flag**: Overall assessment and risk level
+- **Vol R:R 3.5:1**: For every 1% you risk, you could gain 3.5% (excellent)
+- **RSI & Signal**: Momentum indicator and Larsson signal
+- **Volatility Stop**: Where to place your stop loss based on stock's volatility
+- **Accessible Supports**: How many support levels exist within your stop tolerance
+- **Target R1**: Your first profit target
+- **Support S1 Distance**: How close you are to key support level
 
 #### Top Sell Setups
 Same format for bearish opportunities (if any).
