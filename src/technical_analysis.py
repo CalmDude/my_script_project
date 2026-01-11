@@ -976,36 +976,36 @@ def assess_stop_aware_entry_quality(
     # Determine entry quality based on accessible supports
     if total_count == 0:
         entry_quality = "CAUTION"
-        entry_flag = "⚠️ EXTENDED"
+        entry_flag = "\u26a0 EXTENDED"
         entry_note = (
             f"No supports within {stop_tolerance_pct}% stop range (${stop_level:.2f})"
         )
 
     elif excellent_count >= 2 or (excellent_count >= 1 and good_count >= 1):
         entry_quality = "EXCELLENT"
-        entry_flag = "✓ SAFE ENTRY"
+        entry_flag = "\u2713 SAFE ENTRY"
         entry_note = (
             f"{total_count} supports in range, including {excellent_count} EXCELLENT"
         )
 
     elif good_count >= 2 or (good_count >= 1 and moderate_count >= 2):
         entry_quality = "GOOD"
-        entry_flag = "✓ SAFE ENTRY"
+        entry_flag = "\u2713 SAFE ENTRY"
         entry_note = f"{total_count} supports in range, including {good_count} GOOD"
 
     elif good_count >= 1 or moderate_count >= 2:
         entry_quality = "OK"
-        entry_flag = "🎯 ACCEPTABLE"
+        entry_flag = "\u2713 ACCEPTABLE"
         entry_note = f"{total_count} supports in range ({good_count} GOOD, {moderate_count} MODERATE)"
 
     elif moderate_count >= 1:
         entry_quality = "CAUTION"
-        entry_flag = "⚠️ THIN"
+        entry_flag = "\u26a0 THIN"
         entry_note = f"Only {total_count} support(s) in range - limited protection"
 
     else:
         entry_quality = "CAUTION"
-        entry_flag = "⚠️ EXTENDED"
+        entry_flag = "\u26a0 EXTENDED"
         entry_note = f"Weak supports only in {stop_tolerance_pct}% range"
 
     # Check if best supports are out of range but close
@@ -1019,7 +1019,7 @@ def assess_stop_aware_entry_quality(
 
     # If good supports exist but are out of range, suggest waiting
     if out_of_range_good and total_count <= 1:
-        entry_flag = "⏳ WAIT"
+        entry_flag = "\u26a0 WAIT"
         best_support = out_of_range_good[0]
         distance_pct = ((current_price - best_support[1]) / current_price) * 100
         entry_note += f" | {best_support[2]} support at ${best_support[1]:.2f} ({distance_pct:.1f}% down) - wait for pullback"
@@ -1030,10 +1030,132 @@ def assess_stop_aware_entry_quality(
         and abs(current_price - s1) / current_price <= 0.02
         and s1_quality in ["EXCELLENT", "GOOD"]
     ):
-        entry_flag = "🎯 IDEAL"
+        entry_flag = "\u2713 IDEAL"
         entry_note = f"At {s1_quality} support S1 (${s1:.2f})"
 
     return entry_quality, entry_flag, entry_note, accessible_supports
+
+
+def assess_stop_aware_short_entry_quality(
+    current_price,
+    stop_tolerance_pct,
+    r1,
+    r2,
+    r3,
+    r1_quality,
+    r2_quality,
+    r3_quality,
+    d50=None,
+    d100=None,
+    d200=None,
+    poc=None,
+    vah=None,
+    val=None,
+):
+    """
+    Assess SHORT entry quality based on accessible resistances within stop tolerance.
+    For short positions, the stop is ABOVE the entry price.
+
+    Args:
+        current_price: Entry price for short
+        stop_tolerance_pct: Maximum acceptable stop distance (e.g., 8%)
+        r1, r2, r3: Resistance levels
+        r1_quality, r2_quality, r3_quality: Quality ratings for resistances
+        d50, d100, d200, poc, vah, val: Additional resistance levels
+
+    Returns:
+        (exit_quality, exit_flag, exit_note, accessible_resistances)
+    """
+    # Calculate stop level ABOVE entry (for shorts, you lose if price goes up)
+    stop_level = current_price * (1 + stop_tolerance_pct / 100)
+
+    # Collect all potential resistance levels ABOVE stop
+    accessible_resistances = []
+
+    # Check R1, R2, R3
+    if r1 and r1 > stop_level and r1_quality in ["EXCELLENT", "GOOD"]:
+        accessible_resistances.append(("R1", r1, r1_quality))
+    if r2 and r2 > stop_level and r2_quality in ["EXCELLENT", "GOOD"]:
+        accessible_resistances.append(("R2", r2, r2_quality))
+    if r3 and r3 > stop_level and r3_quality in ["EXCELLENT", "GOOD"]:
+        accessible_resistances.append(("R3", r3, r3_quality))
+
+    # Check moving averages above stop
+    if d50 and d50 > stop_level:
+        accessible_resistances.append(("D50", d50, "GOOD"))
+    if d100 and d100 > stop_level:
+        accessible_resistances.append(("D100", d100, "GOOD"))
+    if d200 and d200 > stop_level:
+        accessible_resistances.append(("D200", d200, "GOOD"))
+
+    # Check VRVP levels above stop
+    if poc and poc > stop_level:
+        accessible_resistances.append(("POC", poc, "EXCELLENT"))
+    if vah and vah > stop_level:
+        accessible_resistances.append(("VAH", vah, "GOOD"))
+
+    # Count excellent resistances
+    excellent_count = sum(
+        1 for _, _, quality in accessible_resistances if quality == "EXCELLENT"
+    )
+    good_count = sum(1 for _, _, quality in accessible_resistances if quality == "GOOD")
+
+    # Determine overall quality
+    short_entry_quality = "CAUTION"
+    short_entry_flag = "⏳ WAIT"
+    short_entry_note = ""
+
+    if excellent_count >= 2:
+        short_entry_quality = "EXCELLENT"
+        short_entry_flag = "\u2713 SAFE ENTRY"  # ✓ using Unicode escape
+        short_entry_note = f"{len(accessible_resistances)} accessible resistances within stop tolerance ({stop_tolerance_pct}%)"
+    elif excellent_count >= 1 or good_count >= 2:
+        short_entry_quality = "GOOD"
+        short_entry_flag = "\u2713 IDEAL"  # ✓ using Unicode escape
+        short_entry_note = f"{len(accessible_resistances)} good resistances protect your short position"
+    elif good_count >= 1 or len(accessible_resistances) >= 1:
+        short_entry_quality = "OK"
+        short_entry_flag = "\u2713 ACCEPTABLE"  # ✓ using Unicode escape
+        short_entry_note = (
+            f"Limited resistance structure ({len(accessible_resistances)} level)"
+        )
+    else:
+        # Check if there ARE resistances but they're below the stop
+        resistances_below_stop = []
+        if r1 and r1 < stop_level:
+            resistances_below_stop.append("R1")
+        if r2 and r2 < stop_level:
+            resistances_below_stop.append("R2")
+
+        if resistances_below_stop:
+            short_entry_quality = "CAUTION"
+            short_entry_flag = "\u26a0 THIN"  # ⚠ using Unicode escape
+            short_entry_note = f"Good resistances ({', '.join(resistances_below_stop)}) exist but are BELOW your stop level - cannot protect short"
+        else:
+            # Far from any resistances
+            short_entry_quality = "CAUTION"
+            short_entry_flag = "\u26a0 EXTENDED"  # ⚠ using Unicode escape
+            short_entry_note = (
+                "Price too far from resistances - high risk for short entry"
+            )
+
+    # Special case: very close to excellent resistance (within 2%)
+    if (
+        r1
+        and abs(current_price - r1) / current_price <= 0.02
+        and r1_quality in ["EXCELLENT", "GOOD"]
+    ):
+        short_entry_flag = "\u2713 IDEAL"  # ✓ using Unicode escape
+        short_entry_note = (
+            f"At {r1_quality} resistance R1 (${r1:.2f}) - ideal short entry"
+        )
+
+    return (
+        short_entry_quality,
+        short_entry_flag,
+        short_entry_note,
+        accessible_resistances,
+    )
 
 
 def assess_buy_quality(
@@ -1751,6 +1873,61 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             val=val_60d,
         )
 
+        # Calculate stop-aware short entry quality for SELL/SHORT positions
+        try:
+            (
+                short_entry_quality,
+                short_entry_flag,
+                short_entry_note,
+                accessible_resistances,
+            ) = assess_stop_aware_short_entry_quality(
+                current_price=current_price,
+                stop_tolerance_pct=stop_tolerance_pct,
+                r1=r1,
+                r2=r2,
+                r3=r3,
+                r1_quality=r1_quality[0],
+                r2_quality=r2_quality[0],
+                r3_quality=r3_quality[0],
+                d50=d50,
+                d100=d100,
+                d200=d200,
+                poc=poc_60d,
+                vah=vah_60d,
+                val=val_60d,
+            )
+        except Exception as e:
+            print(
+                f"[ERROR] assess_stop_aware_short_entry_quality failed for {ticker}: {e}"
+            )
+            short_entry_quality = "N/A"
+            short_entry_flag = ""
+            short_entry_note = f"Error: {str(e)}"
+            accessible_resistances = []
+
+        # Calculate Volatility Risk:Reward ratio
+        vol_rr = 0.0
+        if signal == "FULL HOLD + ADD" and r1 and current_price > 0:
+            # For buys: reward to R1 vs volatility stop risk
+            reward_pct = ((r1 - current_price) / current_price) * 100
+            risk_pct = (
+                volatility["suggested_stop_pct"]
+                if volatility and volatility.get("suggested_stop_pct")
+                else 8.0
+            )
+            if risk_pct > 0:
+                vol_rr = reward_pct / risk_pct
+        elif (
+            signal in ["REDUCE", "CASH", "HOLD MOST + REDUCE", "FULL CASH / DEFEND"]
+            and s1
+            and current_price > 0
+        ):
+            # For shorts: reward to S1 vs 8% stop above
+            reward_pct = ((current_price - s1) / current_price) * 100
+            risk_pct = 8.0  # Standard short stop
+            if risk_pct > 0 and s1 < current_price:
+                vol_rr = reward_pct / risk_pct
+
         result = {
             "ticker": ticker,
             "signal": signal,
@@ -1783,6 +1960,7 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
                 volatility["suggested_stop_pct"] if volatility else None
             ),
             "stop_risk": volatility["stop_risk"] if volatility else None,
+            "vol_rr": vol_rr,  # Volatility Risk:Reward ratio
             # Volume Profile - 60 day
             "poc_60d": float(poc_60d) if poc_60d is not None else None,
             "vah_60d": float(vah_60d) if vah_60d is not None else None,
@@ -1823,6 +2001,12 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52):
             "stop_tolerance_pct": stop_tolerance_pct,
             "stop_level": current_price * (1 - stop_tolerance_pct / 100),
             "accessible_supports_count": len(accessible_supports),
+            # Stop-aware short entry quality for SELL/SHORT positions
+            "short_entry_quality": short_entry_quality,
+            "short_entry_flag": short_entry_flag,
+            "short_entry_note": short_entry_note,
+            "short_stop_level": current_price * (1 + stop_tolerance_pct / 100),
+            "accessible_resistances_count": len(accessible_resistances),
             "notes": "",
         }
 

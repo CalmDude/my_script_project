@@ -295,7 +295,7 @@ def scan_stocks(
                     results.append(result)
                     signal = result.get("signal", "N/A")
 
-                    # Only print FULL HOLD + ADD signals with buy quality
+                    # Print FULL HOLD + ADD signals with entry quality
                     if signal == "FULL HOLD + ADD":
                         price = result.get("current_price", 0)
                         buy_quality = result.get("buy_quality", "N/A")
@@ -307,6 +307,20 @@ def scan_stocks(
                             f"[OK] [{completed}/{total}] {ticker:6s} -> {signal:20s} ${price:,.2f} | Entry: {entry_quality:10s} {entry_flag}"
                         )
                         buy_signals.append(result)
+                    # Print bearish signals with short entry quality
+                    elif signal in [
+                        "REDUCE",
+                        "CASH",
+                        "HOLD MOST + REDUCE",
+                        "FULL CASH / DEFEND",
+                    ]:
+                        price = result.get("current_price", 0)
+                        short_entry_quality = result.get("short_entry_quality", "N/A")
+                        short_entry_flag = result.get("short_entry_flag", "")
+
+                        print(
+                            f"[SELL] [{completed}/{total}] {ticker:6s} -> {signal:20s} ${price:,.2f} | Entry: {short_entry_quality:10s} {short_entry_flag}"
+                        )
                     elif completed % 50 == 0:  # Progress update
                         print(f"  [{completed}/{total}] Scanning...")
 
@@ -343,6 +357,7 @@ def scan_stocks(
         return pd.DataFrame()
 
     df = pd.DataFrame(results)
+
     return df
 
 
@@ -366,6 +381,23 @@ def filter_buy_signals(
 
     # Filter by signal
     filtered = df[df["signal"] == signal].copy()
+
+    # Defensive validation: Ensure no bearish signals in buy results
+    if not filtered.empty:
+        bearish_signals = [
+            "HOLD MOST + REDUCE",
+            "REDUCE",
+            "LIGHT / CASH",
+            "CASH",
+            "FULL CASH / DEFEND",
+        ]
+        bearish_stocks = filtered[filtered["signal"].isin(bearish_signals)]
+        if not bearish_stocks.empty:
+            tickers = ", ".join(bearish_stocks["ticker"].tolist())
+            raise ValueError(
+                f"ERROR: Bearish signal stocks found in buy signals: {tickers}. "
+                "This should never happen - signal classification is broken!"
+            )
 
     # Optionally filter by quality
     if quality_filter:
@@ -407,6 +439,16 @@ def filter_sell_signals(df, quality_filter=False):
         "FULL CASH / DEFEND",
     ]
     filtered = df[df["signal"].isin(bearish_signals)].copy()
+
+    # Defensive validation: Ensure no FULL HOLD + ADD stocks in sell signals
+    if not filtered.empty:
+        full_hold_stocks = filtered[filtered["signal"] == "FULL HOLD + ADD"]
+        if not full_hold_stocks.empty:
+            tickers = ", ".join(full_hold_stocks["ticker"].tolist())
+            raise ValueError(
+                f"ERROR: FULL HOLD + ADD stocks found in sell signals: {tickers}. "
+                "This should never happen - signal classification is broken!"
+            )
 
     # Optionally filter by R1 quality (disabled by default to match portfolio behavior)
     if quality_filter and "r1_quality" in filtered.columns:
@@ -767,6 +809,7 @@ def create_best_trades_excel(buy_df, sell_df, output_file, category=""):
                 "Ticker",
                 "Signal",
                 "Quality",
+                "Quality Flag",
                 "Current Price",
                 "Vol R:R",
                 "Vol Stop Price",
@@ -821,24 +864,25 @@ def create_best_trades_excel(buy_df, sell_df, output_file, category=""):
                     "entry_quality", stock.get("buy_quality", "")
                 )
                 entry_flag = stock.get("entry_flag", "")
-                ws_buy.cell(row, 4, f"{quality_display} {entry_flag}")
-                ws_buy.cell(row, 5, price)
-                ws_buy.cell(row, 6, f"1:{vol_rr:.1f}" if vol_rr > 0 else "N/A")
-                ws_buy.cell(row, 7, vol_stop_price)
-                ws_buy.cell(row, 8, f"-{suggested_stop:.1f}%")
-                ws_buy.cell(row, 9, r1 if r1 > 0 else "")
-                ws_buy.cell(row, 10, f"+{reward_pct:.1f}%" if reward_pct else "")
-                ws_buy.cell(row, 11, s1)
-                ws_buy.cell(row, 12, f"{distance_to_s1:.1f}%" if distance_to_s1 else "")
+                ws_buy.cell(row, 4, quality_display)
+                ws_buy.cell(row, 5, entry_flag)
+                ws_buy.cell(row, 6, price)
+                ws_buy.cell(row, 7, f"1:{vol_rr:.1f}" if vol_rr > 0 else "N/A")
+                ws_buy.cell(row, 8, vol_stop_price)
+                ws_buy.cell(row, 9, f"-{suggested_stop:.1f}%")
+                ws_buy.cell(row, 10, r1 if r1 > 0 else "")
+                ws_buy.cell(row, 11, f"+{reward_pct:.1f}%" if reward_pct else "")
+                ws_buy.cell(row, 12, s1)
+                ws_buy.cell(row, 13, f"{distance_to_s1:.1f}%" if distance_to_s1 else "")
                 ws_buy.cell(
                     row,
-                    13,
+                    14,
                     f"{stock.get('rsi'):.1f}" if stock.get("rsi") is not None else "",
                 )
-                ws_buy.cell(row, 14, f"{bb_pct:.1f}%" if bb_pct else "")
+                ws_buy.cell(row, 15, f"{bb_pct:.1f}%" if bb_pct else "")
                 daily_range = stock.get("avg_daily_range_pct")
-                ws_buy.cell(row, 15, f"{daily_range:.2f}%" if daily_range else "")
-                ws_buy.cell(row, 16, stock.get("volatility_class", ""))
+                ws_buy.cell(row, 16, f"{daily_range:.2f}%" if daily_range else "")
+                ws_buy.cell(row, 17, stock.get("volatility_class", ""))
                 row += 1
 
             # Auto-size columns
@@ -853,11 +897,14 @@ def create_best_trades_excel(buy_df, sell_df, output_file, category=""):
 
     # === TAB 2: TOP SELL SETUPS ===
     if not sell_df.empty:
-        # OPTION 1: Filter for EXCELLENT and GOOD quality only, then rank by Vol R:R
+        # OPTION 1: Filter for EXCELLENT and GOOD exit quality (short entry), then rank by Vol R:R
         sell_df = sell_df.copy()
 
-        # Filter for quality setups only
-        sell_df = sell_df[sell_df["r1_quality"].isin(["EXCELLENT", "GOOD"])].copy()
+        # Filter for quality setups only (use exit_quality if available, fallback to r1_quality)
+        quality_col = (
+            "exit_quality" if "exit_quality" in sell_df.columns else "r1_quality"
+        )
+        sell_df = sell_df[sell_df[quality_col].isin(["EXCELLENT", "GOOD"])].copy()
 
         if not sell_df.empty:
             # Calculate Vol R:R for ranking
@@ -897,6 +944,7 @@ def create_best_trades_excel(buy_df, sell_df, output_file, category=""):
                 "Ticker",
                 "Signal",
                 "Quality",
+                "Quality Flag",
                 "Current Price",
                 "Vol R:R",
                 "Vol Stop Price",
@@ -946,26 +994,31 @@ def create_best_trades_excel(buy_df, sell_df, output_file, category=""):
                 ws_sell.cell(row, 1, stock["rank"])
                 ws_sell.cell(row, 2, stock["ticker"])
                 ws_sell.cell(row, 3, stock.get("signal", ""))
-                ws_sell.cell(row, 4, stock.get("r1_quality", ""))
-                ws_sell.cell(row, 5, price)
-                ws_sell.cell(row, 6, f"1:{vol_rr:.1f}" if vol_rr > 0 else "N/A")
-                ws_sell.cell(row, 7, vol_stop_price)
-                ws_sell.cell(row, 8, f"-{suggested_stop:.1f}%")
-                ws_sell.cell(row, 9, s1 if s1 > 0 else "")
-                ws_sell.cell(row, 10, f"+{reward_pct:.1f}%" if reward_pct else "")
-                ws_sell.cell(row, 11, r1)
+
+                # Use exit_quality and short_entry_flag for short entry assessment
+                quality_display = stock.get("exit_quality", stock.get("r1_quality", ""))
+                short_entry_flag = stock.get("short_entry_flag", "")
+                ws_sell.cell(row, 4, quality_display)
+                ws_sell.cell(row, 5, short_entry_flag)
+                ws_sell.cell(row, 6, price)
+                ws_sell.cell(row, 7, f"1:{vol_rr:.1f}" if vol_rr > 0 else "N/A")
+                ws_sell.cell(row, 8, vol_stop_price)
+                ws_sell.cell(row, 9, f"-{suggested_stop:.1f}%")
+                ws_sell.cell(row, 10, s1 if s1 > 0 else "")
+                ws_sell.cell(row, 11, f"+{reward_pct:.1f}%" if reward_pct else "")
+                ws_sell.cell(row, 12, r1)
                 ws_sell.cell(
-                    row, 12, f"{distance_to_r1:.1f}%" if distance_to_r1 else ""
+                    row, 13, f"{distance_to_r1:.1f}%" if distance_to_r1 else ""
                 )
                 ws_sell.cell(
                     row,
-                    13,
+                    14,
                     f"{stock.get('rsi'):.1f}" if stock.get("rsi") is not None else "",
                 )
-                ws_sell.cell(row, 14, f"{bb_pct:.1f}%" if bb_pct else "")
+                ws_sell.cell(row, 15, f"{bb_pct:.1f}%" if bb_pct else "")
                 daily_range = stock.get("avg_daily_range_pct")
-                ws_sell.cell(row, 15, f"{daily_range:.2f}%" if daily_range else "")
-                ws_sell.cell(row, 16, stock.get("volatility_class", ""))
+                ws_sell.cell(row, 16, f"{daily_range:.2f}%" if daily_range else "")
+                ws_sell.cell(row, 17, stock.get("volatility_class", ""))
                 row += 1
 
             # Auto-size columns
@@ -987,10 +1040,10 @@ def create_best_trades_excel(buy_df, sell_df, output_file, category=""):
         3, 1, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
     ).font = Font(italic=True)
 
-    ws_summary.cell(5, 1, "Buy Opportunities:").font = Font(bold=True)
+    ws_summary.cell(5, 1, "Buy Setups:").font = Font(bold=True)
     ws_summary.cell(5, 2, len(buy_df) if not buy_df.empty else 0)
 
-    ws_summary.cell(6, 1, "Sell Opportunities:").font = Font(bold=True)
+    ws_summary.cell(6, 1, "Sell Setups:").font = Font(bold=True)
     ws_summary.cell(6, 2, len(sell_df) if not sell_df.empty else 0)
 
     if not buy_df.empty:
@@ -1038,14 +1091,12 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
     header_font = Font(bold=True, color="FFFFFF")
     center_align = Alignment(horizontal="center", vertical="center")
 
-    # === TAB 1: BUY OPPORTUNITIES ===
+    # === TAB 1: BUY SETUPS ===
     if not buy_df.empty:
-        ws_buy = wb.create_sheet("Buy Opportunities")
+        ws_buy = wb.create_sheet("Buy Setups")
 
         # Title
-        ws_buy.cell(1, 1, f"{category} - BUY OPPORTUNITIES").font = Font(
-            bold=True, size=14
-        )
+        ws_buy.cell(1, 1, f"{category} - BUY SETUPS").font = Font(bold=True, size=14)
         ws_buy.cell(
             2, 1, f"FULL HOLD + ADD signals with EXCELLENT/GOOD/OK quality"
         ).font = Font(italic=True, color="666666")
@@ -1055,12 +1106,12 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
             "Ticker",
             "Price",
             "Signal",
+            "Quality",
+            "Quality Flag",
             "RSI",
             "BB_Upper",
             "BB_Middle",
             "BB_Lower",
-            "Entry Quality",
-            "Entry Flag",
             "S1",
             "S2",
             "S3",
@@ -1087,12 +1138,12 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
             ws_buy.cell(row, 1, stock["ticker"])
             ws_buy.cell(row, 2, stock.get("current_price"))
             ws_buy.cell(row, 3, stock["signal"])
-            ws_buy.cell(row, 4, stock.get("rsi"))
-            ws_buy.cell(row, 5, stock.get("bb_upper"))
-            ws_buy.cell(row, 6, stock.get("bb_middle"))
-            ws_buy.cell(row, 7, stock.get("bb_lower"))
-            ws_buy.cell(row, 8, stock.get("entry_quality", stock.get("buy_quality")))
-            ws_buy.cell(row, 9, stock.get("entry_flag", ""))
+            ws_buy.cell(row, 4, stock.get("entry_quality", stock.get("buy_quality")))
+            ws_buy.cell(row, 5, stock.get("entry_flag", ""))
+            ws_buy.cell(row, 6, stock.get("rsi"))
+            ws_buy.cell(row, 7, stock.get("bb_upper"))
+            ws_buy.cell(row, 8, stock.get("bb_middle"))
+            ws_buy.cell(row, 9, stock.get("bb_lower"))
             ws_buy.cell(row, 10, stock.get("s1"))
             ws_buy.cell(row, 11, stock.get("s2"))
             ws_buy.cell(row, 12, stock.get("s3"))
@@ -1116,14 +1167,12 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
                 max_length + 2, 50
             )
 
-    # === TAB 2: SELL OPPORTUNITIES ===
+    # === TAB 2: SELL SETUPS ===
     if not sell_df.empty:
-        ws_sell = wb.create_sheet("Sell Opportunities")
+        ws_sell = wb.create_sheet("Sell Setups")
 
         # Title
-        ws_sell.cell(1, 1, f"{category} - SELL OPPORTUNITIES").font = Font(
-            bold=True, size=14
-        )
+        ws_sell.cell(1, 1, f"{category} - SELL SETUPS").font = Font(bold=True, size=14)
         ws_sell.cell(2, 1, f"Bearish signals - reduce exposure").font = Font(
             italic=True, color="666666"
         )
@@ -1133,6 +1182,8 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
             "Ticker",
             "Price",
             "Signal",
+            "Quality",
+            "Quality Flag",
             "RSI",
             "BB_Upper",
             "BB_Middle",
@@ -1159,17 +1210,19 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
             ws_sell.cell(row, 1, stock["ticker"])
             ws_sell.cell(row, 2, stock.get("current_price"))
             ws_sell.cell(row, 3, stock["signal"])
-            ws_sell.cell(row, 4, stock.get("rsi"))
-            ws_sell.cell(row, 5, stock.get("bb_upper"))
-            ws_sell.cell(row, 6, stock.get("bb_middle"))
-            ws_sell.cell(row, 7, stock.get("bb_lower"))
-            ws_sell.cell(row, 8, stock.get("r1_quality"))
-            ws_sell.cell(row, 9, stock.get("r1"))
-            ws_sell.cell(row, 10, stock.get("r2"))
-            ws_sell.cell(row, 11, stock.get("r3"))
-            ws_sell.cell(row, 12, stock.get("d50"))
-            ws_sell.cell(row, 13, stock.get("d100"))
-            ws_sell.cell(row, 14, stock.get("d200"))
+            ws_sell.cell(row, 4, stock.get("short_entry_quality", "N/A"))
+            ws_sell.cell(row, 5, stock.get("short_entry_flag", ""))
+            ws_sell.cell(row, 6, stock.get("rsi"))
+            ws_sell.cell(row, 7, stock.get("bb_upper"))
+            ws_sell.cell(row, 8, stock.get("bb_middle"))
+            ws_sell.cell(row, 9, stock.get("bb_lower"))
+            ws_sell.cell(row, 10, stock.get("r1_quality"))
+            ws_sell.cell(row, 11, stock.get("r1"))
+            ws_sell.cell(row, 12, stock.get("r2"))
+            ws_sell.cell(row, 13, stock.get("r3"))
+            ws_sell.cell(row, 14, stock.get("d50"))
+            ws_sell.cell(row, 15, stock.get("d100"))
+            ws_sell.cell(row, 16, stock.get("d200"))
             row += 1
 
         # Auto-size columns
@@ -1187,9 +1240,9 @@ def create_excel_output(buy_df, sell_df, output_file, category=""):
 
     print(f"[OK] Excel file created: {output_file}")
     if not buy_df.empty:
-        print(f"  - Buy Opportunities: {len(buy_df)} stocks")
+        print(f"  - Buy Setups: {len(buy_df)} stocks")
     if not sell_df.empty:
-        print(f"  - Sell Opportunities: {len(sell_df)} stocks")
+        print(f"  - Sell Setups: {len(sell_df)} stocks")
 
 
 def create_portfolio_excel(all_df, output_file, category="Portfolio"):
@@ -1360,30 +1413,35 @@ def create_pdf_report(buy_df, sell_df, output_file, timestamp_str, category=""):
     summary_text = f"""
     <b>Market Scan Summary</b><br/>
     <br/>
-    <b>Buy Opportunities:</b> {len(buy_df)} stocks (FULL HOLD + ADD with quality)<br/>
-    <b>Sell Signals:</b> {len(sell_df)} stocks (Bearish - reduce exposure)<br/>
+    <b>Buy Setups:</b> {len(buy_df)} stocks (FULL HOLD + ADD with quality)<br/>
+    <b>Sell Setups:</b> {len(sell_df)} stocks (Bearish - reduce exposure)<br/>
     <br/>
     <b>Report Contents:</b><br/>
-    - Section 1: Buy Opportunities (detailed entry plans)<br/>
-    - Section 2: Sell Signals (exit recommendations)<br/>
+    - Section 1: Buy Setups (detailed entry plans)<br/>
+    - Section 2: Sell Setups (exit recommendations)<br/>
     <br/>
     <i>Generated: {datetime.now().strftime('%Y-%m-%d %I:%M %p')}</i>
     """
     elements.append(Paragraph(summary_text, styles["Normal"]))
     elements.append(PageBreak())
 
-    # === SECTION 1: BUY OPPORTUNITIES ===
+    # === SECTION 1: BUY SETUPS ===
     if not buy_df.empty:
-        elements.append(
-            Paragraph(f"BUY OPPORTUNITIES ({len(buy_df)} stocks)", section_style)
-        )
+        elements.append(Paragraph(f"BUY SETUPS ({len(buy_df)} stocks)", section_style))
         elements.append(Spacer(1, 0.1 * inch))
 
-        for _, stock in buy_df.sort_values("ticker").iterrows():
+        # Sort by vol_rr if available, otherwise by ticker
+        sort_col = "vol_rr" if "vol_rr" in buy_df.columns else "ticker"
+        sort_asc = False if sort_col == "vol_rr" else True
+
+        for rank, (_, stock) in enumerate(
+            buy_df.sort_values(sort_col, ascending=sort_asc).iterrows(), 1
+        ):
             ticker = stock["ticker"]
             price = stock["current_price"]
             signal = stock["signal"]
             buy_quality = stock.get("buy_quality", "N/A")
+            rsi = stock.get("rsi")
 
             # Get stop-aware entry quality
             entry_quality = stock.get("entry_quality", buy_quality)
@@ -1391,18 +1449,62 @@ def create_pdf_report(buy_df, sell_df, output_file, timestamp_str, category=""):
             entry_note = stock.get("entry_note", "")
             stop_tolerance = stock.get("stop_tolerance_pct", 8.0)
             stop_level = stock.get("stop_level", 0)
+            vol_rr = stock.get("vol_rr", 0)
 
-            # Stock header with entry flag
-            header_text = f"<b>{ticker}</b> - ${price:,.2f} ({signal}) {entry_flag}"
+            # Color code the R:R ratio
+            if vol_rr >= 3:
+                rr_color = "#27ae60"  # Green
+            elif vol_rr >= 2:
+                rr_color = "#3498db"  # Blue
+            elif vol_rr >= 1:
+                rr_color = "#f39c12"  # Orange
+            else:
+                rr_color = "#e74c3c"  # Red
+
+            # Stock header with ranking, entry quality and flag
+            entry_flag_text = f" {entry_flag}" if entry_flag else ""
+            header_text = f"<b>#{rank}. {ticker} - ${price:,.2f}</b> | <font color='#2980b9'><b>{entry_quality}{entry_flag_text}</b></font> | Vol R:R: <font color='{rr_color}'><b>{vol_rr:.1f}:1</b></font>"
             elements.append(Paragraph(header_text, subsection_style))
 
-            # Entry quality assessment with stop awareness
-            entry_summary = f"""
-            <b>Entry Quality ({stop_tolerance:.0f}% Stop):</b> {entry_quality}<br/>
-            <i>{entry_note}</i><br/>
-            <b>Stop Level:</b> ${stop_level:,.2f} (-{stop_tolerance:.1f}%)
+            # RSI and Signal line
+            rsi_text = f"{rsi:.1f}" if rsi else "N/A"
+            signal_line = f"<b>RSI:</b> {rsi_text} | <b>Signal:</b> {signal}"
+            elements.append(Paragraph(signal_line, styles["Normal"]))
+            elements.append(Spacer(1, 0.05 * inch))
+
+            # Volatility Stop and Support Info
+            suggested_stop = stock.get("suggested_stop_pct", 5.0)
+            vol_stop_price = price * (1 - suggested_stop / 100)
+            accessible_supports = stock.get("accessible_supports_count", 0)
+
+            stop_info = f"""
+            <b>Volatility Stop ({suggested_stop:.1f}%):</b> ${vol_stop_price:.2f} loss = <font color="#e74c3c">-{suggested_stop:.1f}%</font><br/>
+            <br/>
+            <b>{stop_tolerance:.0f}% Stop Tolerance:</b> ${stop_level:.2f} | <b>Accessible Supports:</b> {accessible_supports} within range<br/>
             """
-            elements.append(Paragraph(entry_summary, styles["Normal"]))
+            elements.append(Paragraph(stop_info, styles["Normal"]))
+
+            # Target R1
+            r1 = stock.get("r1", 0)
+            if r1 and price > 0:
+                reward_pct = ((r1 - price) / price * 100) if r1 > price else 0
+                target_text = f"<b>Target R1:</b> ${r1:.2f} gain = <font color='#27ae60'>+{reward_pct:.1f}%</font>"
+                elements.append(Paragraph(target_text, styles["Normal"]))
+            elements.append(Spacer(1, 0.05 * inch))
+
+            # Support S1 and Volatility info
+            s1 = stock.get("s1", 0)
+            volatility_class = stock.get("volatility_class", "")
+            daily_range = stock.get("avg_daily_range_pct", 0)
+            if s1 and price > 0:
+                distance_to_s1 = abs((price - s1) / price * 100)
+                s1_text = f"<b>Support S1:</b> ${s1:.2f} ({distance_to_s1:.1f}% away) | <b>Volatility:</b> {volatility_class} (~{daily_range:.2f}% daily range)"
+                elements.append(Paragraph(s1_text, styles["Normal"]))
+            elements.append(Spacer(1, 0.05 * inch))
+
+            # Entry note
+            if entry_note:
+                elements.append(Paragraph(f"<i>{entry_note}</i>", styles["Normal"]))
             elements.append(Spacer(1, 0.05 * inch))
 
             # Support levels (entry zones)
@@ -1498,56 +1600,127 @@ def create_pdf_report(buy_df, sell_df, output_file, timestamp_str, category=""):
 
             elements.append(Spacer(1, 0.15 * inch))
     else:
-        elements.append(Paragraph("BUY OPPORTUNITIES (0 stocks)", section_style))
+        elements.append(Paragraph("BUY SETUPS (0 stocks)", section_style))
         elements.append(
             Paragraph("No quality buy signals at this time.", styles["Normal"])
         )
         elements.append(PageBreak())
 
-    # === SECTION 2: SELL SIGNALS ===
+    # === SECTION 2: SELL SETUPS ===
     if not sell_df.empty:
         elements.append(PageBreak())
         elements.append(
-            Paragraph(f"SELL SIGNALS ({len(sell_df)} stocks)", section_style)
+            Paragraph(f"SELL SETUPS ({len(sell_df)} stocks)", section_style)
         )
         elements.append(Spacer(1, 0.1 * inch))
 
-        for _, stock in sell_df.sort_values("ticker").iterrows():
+        # Sort by vol_rr if available, otherwise by ticker
+        sort_col = "vol_rr" if "vol_rr" in sell_df.columns else "ticker"
+        sort_asc = False if sort_col == "vol_rr" else True
+
+        for rank, (_, stock) in enumerate(
+            sell_df.sort_values(sort_col, ascending=sort_asc).iterrows(), 1
+        ):
             ticker = stock["ticker"]
             price = stock["current_price"]
             signal = stock["signal"]
             r1_quality = stock.get("r1_quality", "N/A")
             r2_quality = stock.get("r2_quality", "N/A")
             r3_quality = stock.get("r3_quality", "N/A")
+            rsi = stock.get("rsi")
 
-            # Stock header
-            header_text = f"<b>{ticker}</b> - ${price:,.2f} ({signal})"
+            # Short entry quality assessment
+            short_entry_quality = stock.get("short_entry_quality", "N/A")
+            short_entry_flag = stock.get("short_entry_flag", "")
+            short_entry_note = stock.get("short_entry_note", "")
+            vol_rr = stock.get("vol_rr", 0)
+
+            # Color code the R:R ratio
+            if vol_rr >= 3:
+                rr_color = "#27ae60"  # Green
+            elif vol_rr >= 2:
+                rr_color = "#3498db"  # Blue
+            elif vol_rr >= 1:
+                rr_color = "#f39c12"  # Orange
+            else:
+                rr_color = "#e74c3c"  # Red
+
+            # Stock header with ranking, short entry quality and flag
+            short_flag_text = f" {short_entry_flag}" if short_entry_flag else ""
+            header_text = f"<b>#{rank}. {ticker} - ${price:,.2f}</b> | <font color='#2980b9'><b>{short_entry_quality}{short_flag_text}</b></font> | Vol R:R: <font color='{rr_color}'><b>{vol_rr:.1f}:1</b></font>"
             elements.append(Paragraph(header_text, subsection_style))
 
-            # Resistance levels (exit targets)
-            r1 = stock.get("r1")
-            r2 = stock.get("r2")
-            r3 = stock.get("r3")
+            # RSI and Signal line
+            rsi_text = f"{rsi:.1f}" if rsi else "N/A"
+            signal_line = f"<b>RSI:</b> {rsi_text} | <b>Signal:</b> {signal}"
+            elements.append(Paragraph(signal_line, styles["Normal"]))
+            elements.append(Spacer(1, 0.05 * inch))
 
-            exit_text = "<b>Exit Targets (Resistance Levels):</b><br/>"
-            if r1:
-                exit_text += f"- R1: ${r1:,.2f} - Primary exit level<br/>"
-            if r2:
-                exit_text += f"- R2: ${r2:,.2f} - Secondary exit<br/>"
-            if r3:
-                exit_text += f"- R3: ${r3:,.2f} - Final exit<br/>"
+            # Volatility Stop
+            suggested_stop = stock.get("suggested_stop_pct", 5.0)
+            vol_stop_price = price * (
+                1 + suggested_stop / 100
+            )  # For shorts, stop is above
+
+            stop_info = f"<b>Volatility Stop ({suggested_stop:.1f}%):</b> ${vol_stop_price:.2f} loss = <font color='#e74c3c'>-{suggested_stop:.1f}%</font>"
+            elements.append(Paragraph(stop_info, styles["Normal"]))
+            elements.append(Spacer(1, 0.05 * inch))
+
+            # Target S1
+            s1 = stock.get("s1", 0)
+            if s1 and price > 0 and s1 < price:
+                reward_pct = (price - s1) / price * 100
+                target_text = f"<b>Target S1:</b> ${s1:.2f} gain = <font color='#27ae60'>+{reward_pct:.1f}%</font>"
+                elements.append(Paragraph(target_text, styles["Normal"]))
+            elements.append(Spacer(1, 0.05 * inch))
+
+            # Resistance R1 and Volatility info
+            r1 = stock.get("r1", 0)
+            volatility_class = stock.get("volatility_class", "")
+            daily_range = stock.get("avg_daily_range_pct", 0)
+            if r1 and price > 0:
+                distance_to_r1 = abs((r1 - price) / price * 100)
+                r1_text = f"<b>Resistance R1:</b> ${r1:.2f} ({distance_to_r1:.1f}% away) | <b>Volatility:</b> {volatility_class} (~{daily_range:.2f}% daily range)"
+                elements.append(Paragraph(r1_text, styles["Normal"]))
+            elements.append(Spacer(1, 0.05 * inch))
+
+            # Entry note
+            if short_entry_note:
+                elements.append(
+                    Paragraph(f"<i>{short_entry_note}</i>", styles["Normal"])
+                )
+            elements.append(Spacer(1, 0.05 * inch))
+
+            # Support levels (downside targets for shorts)
+            s1 = stock.get("s1")
+            s2 = stock.get("s2")
+            s3 = stock.get("s3")
+
+            exit_text = "<b>Downside Targets (Support Levels):</b><br/>"
+            if s1:
+                gain1 = (price - s1) / price * 100 if price > 0 and s1 < price else 0
+                exit_text += f"- S1: ${s1:,.2f} ({gain1:.1f}% gain)<br/>"
+            if s2:
+                gain2 = (price - s2) / price * 100 if price > 0 and s2 < price else 0
+                exit_text += f"- S2: ${s2:,.2f} ({gain2:.1f}% gain)<br/>"
+            if s3:
+                gain3 = (price - s3) / price * 100 if price > 0 and s3 < price else 0
+                exit_text += f"- S3: ${s3:,.2f} ({gain3:.1f}% gain)<br/>"
             elements.append(Paragraph(exit_text, styles["Normal"]))
             elements.append(Spacer(1, 0.05 * inch))
 
-            # R1/R2/R3 quality assessments (matching portfolio format)
-            r1_quality_note = stock.get("r1_quality_note", "")
-            r2_quality_note = stock.get("r2_quality_note", "")
-            r3_quality_note = stock.get("r3_quality_note", "")
+            # S1/S2/S3 quality assessments (matching portfolio format)
+            s1_quality = stock.get("s1_quality", "N/A")
+            s1_quality_note = stock.get("s1_quality_note", "")
+            s2_quality = stock.get("s2_quality", "N/A")
+            s2_quality_note = stock.get("s2_quality_note", "")
+            s3_quality = stock.get("s3_quality", "N/A")
+            s3_quality_note = stock.get("s3_quality_note", "")
 
             quality_text = f"""
-            <b>Sell Quality R1:</b> {r1_quality} - {r1_quality_note}<br/>
-            <b>Sell Quality R2:</b> {r2_quality} - {r2_quality_note}<br/>
-            <b>Sell Quality R3:</b> {r3_quality} - {r3_quality_note}
+            <b>Cover Quality S1:</b> {s1_quality} - {s1_quality_note}<br/>
+            <b>Cover Quality S2:</b> {s2_quality} - {s2_quality_note}<br/>
+            <b>Cover Quality S3:</b> {s3_quality} - {s3_quality_note}
             """
             elements.append(Paragraph(quality_text, styles["Normal"]))
             elements.append(Spacer(1, 0.05 * inch))
@@ -1571,7 +1744,7 @@ def create_pdf_report(buy_df, sell_df, output_file, timestamp_str, category=""):
             elements.append(Spacer(1, 0.15 * inch))
     else:
         elements.append(PageBreak())
-        elements.append(Paragraph("SELL SIGNALS (0 stocks)", section_style))
+        elements.append(Paragraph("SELL SETUPS (0 stocks)", section_style))
         elements.append(Paragraph("No bearish signals at this time.", styles["Normal"]))
 
     # Glossary Section
@@ -1730,9 +1903,14 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
             buy_scored = buy_scored.sort_values("vol_rr", ascending=False).head(15)
 
     if not sell_scored.empty:
-        # Filter for EXCELLENT and GOOD quality only
+        # Filter for EXCELLENT and GOOD short entry quality
+        quality_col = (
+            "short_entry_quality"
+            if "short_entry_quality" in sell_scored.columns
+            else "r1_quality"
+        )
         sell_scored = sell_scored[
-            sell_scored["r1_quality"].isin(["EXCELLENT", "GOOD"])
+            sell_scored[quality_col].isin(["EXCELLENT", "GOOD"])
         ].copy()
 
         if not sell_scored.empty:
@@ -1760,11 +1938,12 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
     summary_text = f"""
     <b>Best Trading Setups - Volatility-Based Ranking</b><br/>
     <br/>
-    <b>Buy Opportunities:</b> {len(buy_scored)} EXCELLENT/GOOD entry quality (stop-aware) setups<br/>
-    <b>Sell Signals:</b> {len(sell_scored)} EXCELLENT/GOOD quality setups<br/>
+    <b>Buy Setups:</b> {len(buy_scored)} EXCELLENT/GOOD entry quality (stop-aware) setups<br/>
+    <b>Short Opportunities:</b> {len(sell_scored)} EXCELLENT/GOOD short entry quality (stop-aware) setups<br/>
     <br/>
     <b>Selection Criteria:</b><br/>
-    • <b>Quality Filter:</b> Only EXCELLENT or GOOD entry quality (supports within 8% stop tolerance)<br/>
+    • <b>Quality Filter (Buys):</b> Only EXCELLENT or GOOD entry quality (supports within 8% stop tolerance)<br/>
+    • <b>Quality Filter (Shorts):</b> Only EXCELLENT or GOOD short entry quality (resistances above 8% stop tolerance)<br/>
     • <b>Ranking:</b> Sorted by Vol R:R (Volatility Risk/Reward Ratio) - highest first<br/>
     <br/>
     <b>What is Vol R:R?</b><br/>
@@ -1772,9 +1951,9 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
     Example: +12% reward / 6% vol stop = 2:1 Vol R:R<br/>
     <br/>
     <b>Quality Ratings (Stop-Aware):</b><br/>
-    • <b>EXCELLENT:</b> Multiple strong supports within your 8% stop range<br/>
-    • <b>GOOD:</b> At least one strong support accessible within 8% stop tolerance<br/>
-    • Filters out entries where good supports are beyond your stop range<br/>
+    • <b>BUY ENTRIES:</b> Multiple strong supports within your 8% stop range protect long positions<br/>
+    • <b>SHORT ENTRIES:</b> Multiple strong resistances above your 8% stop protect short positions<br/>
+    • Filters out entries where good supports/resistances are beyond your stop tolerance<br/>
     <br/>
     <i>Focus on higher Vol R:R setups (2:1 or better) for optimal risk-adjusted returns.</i>
     """
@@ -1783,11 +1962,7 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
 
     # === TOP BUY SETUPS ===
     if not buy_scored.empty:
-        elements.append(
-            Paragraph(
-                f"TOP {len(buy_scored)} BUY SETUPS (Ranked by Vol R:R)", section_style
-            )
-        )
+        elements.append(Paragraph(f"TOP {len(buy_scored)} BUY SETUPS", section_style))
         elements.append(Spacer(1, 0.1 * inch))
 
         for rank, (_, stock) in enumerate(buy_scored.iterrows(), 1):
@@ -1842,9 +2017,12 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
             accessible_supports = stock.get("accessible_supports_count", 0)
             entry_note = stock.get("entry_note", "")
 
+            # Format entry flag for display
+            entry_flag_display = f" {entry_flag}" if entry_flag else ""
+
             card_text = f"""
-            <font size=12><b>#{rank}. {ticker}</b> - <font color="{quality_color}"><b>{quality}</b></font> {entry_flag} | Vol R:R: <font color="{rr_color}"><b>1:{vol_rr:.1f}</b></font></font><br/>
-            <b>Current Price:</b> ${price:.2f} | <b>RSI:</b> {f'{rsi:.1f}' if rsi else 'N/A'} | <b>Signal:</b> {signal or 'N/A'}<br/>
+            <font size=12><b>#{rank}. {ticker} - ${price:.2f}</b> | <font color="{quality_color}"><b>{quality}</b>{entry_flag_display}</font> | Vol R:R: <font color="{rr_color}"><b>{vol_rr:.1f}:1</b></font></font><br/>
+            <b>RSI:</b> {f'{rsi:.1f}' if rsi else 'N/A'} | <b>Signal:</b> {signal or 'N/A'}<br/>
             <br/>
             <b>Volatility Stop ({suggested_stop:.1f}%):</b> ${vol_stop_price:.2f} loss = <font color="#e74c3c">-{suggested_stop:.1f}%</font><br/>
             <b>8% Stop Tolerance:</b> ${stop_level:.2f} | <b>Accessible Supports:</b> {accessible_supports} within range<br/>
@@ -1867,17 +2045,14 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
 
     # === TOP SELL SETUPS ===
     if not sell_scored.empty:
-        elements.append(
-            Paragraph(
-                f"TOP {len(sell_scored)} SELL SETUPS (Ranked by Vol R:R)", section_style
-            )
-        )
+        elements.append(Paragraph(f"TOP {len(sell_scored)} SELL SETUPS", section_style))
         elements.append(Spacer(1, 0.1 * inch))
 
         for rank, (_, stock) in enumerate(sell_scored.iterrows(), 1):
             ticker = stock["ticker"]
             price = stock.get("current_price", 0)
-            quality = stock.get("r1_quality", "")
+            quality = stock.get("short_entry_quality", stock.get("r1_quality", ""))
+            short_entry_flag = stock.get("short_entry_flag", "")
             signal = stock.get("signal", "")
             r1 = stock.get("r1", 0)
             s1 = stock.get("s1", 0)
@@ -1918,12 +2093,12 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category=""):
             volatility_class = stock.get("volatility_class", "")
             daily_range = stock.get("avg_daily_range_pct", 0)
 
-            # No entry flag for sells
-            entry_flag = ""
+            # Format short entry flag for display
+            short_flag_text = f" {short_entry_flag}" if short_entry_flag else ""
 
             card_text = f"""
-            <font size=12><b>#{rank}. {ticker}</b> - <font color="{quality_color}"><b>{quality}</b> {entry_flag}</font> | Vol R:R: <font color="{rr_color}"><b>1:{vol_rr:.1f}</b></font></font><br/>
-            <b>Current Price:</b> ${price:.2f} | <b>RSI:</b> {f'{rsi:.1f}' if rsi else 'N/A'} | <b>Signal:</b> {signal or 'N/A'}<br/>
+            <font size=12><b>#{rank}. {ticker} - ${price:.2f}</b> | <font color="{quality_color}"><b>{quality}{short_flag_text}</b></font> | Vol R:R: <font color="{rr_color}"><b>{vol_rr:.1f}:1</b></font></font><br/>
+            <b>RSI:</b> {f'{rsi:.1f}' if rsi else 'N/A'} | <b>Signal:</b> {signal or 'N/A'}<br/>
             <br/>
             <b>Volatility Stop ({suggested_stop:.1f}%):</b> ${vol_stop_price:.2f} loss = <font color="#e74c3c">-{suggested_stop:.1f}%</font><br/>
             <b>Target S1:</b> ${s1:.2f} gain = <font color="#27ae60">+{reward_pct:.1f}%</font><br/>
