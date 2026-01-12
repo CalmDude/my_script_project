@@ -1,7 +1,7 @@
 """
-Best Trades Backtest Engine
+Watchlist Backtest Engine
 
-Analyzes historical best trades recommendations to:
+Analyzes historical watchlist recommendations to:
 1. Measure win rate and average returns
 2. Identify which quality ratings/flags have the strongest edge
 3. Test Vol R:R prediction accuracy
@@ -22,9 +22,9 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-class BestTradesBacktest:
+class WatchlistBacktest:
     """
-    Backtest historical Best Trades recommendations
+    Backtest historical Watchlist recommendations
     """
 
     def __init__(self, results_dir: Path = None):
@@ -40,9 +40,9 @@ class BestTradesBacktest:
         self.results_dir = results_dir
         self.backtest_results = []
 
-    def find_best_trades_files(self, category: str = None) -> List[Path]:
+    def find_watchlist_files(self, category: str = None) -> List[Path]:
         """
-        Find all best trades Excel files
+        Find all watchlist Excel files
 
         Args:
             category: Filter by category (sp500, nasdaq100, portfolio) or None for all
@@ -63,13 +63,13 @@ class BestTradesBacktest:
             if category:
                 category_dir = search_path / category
                 if category_dir.exists():
-                    files.extend(category_dir.glob("*_best_trades_*.xlsx"))
+                    files.extend(category_dir.glob("*_watchlist_*.xlsx"))
             else:
                 # Search all subfolders
                 for subfolder in ["sp500", "nasdaq100", "portfolio"]:
                     subfolder_path = search_path / subfolder
                     if subfolder_path.exists():
-                        files.extend(subfolder_path.glob("*_best_trades_*.xlsx"))
+                        files.extend(subfolder_path.glob("*_watchlist_*.xlsx"))
 
         # Sort by date (newest first)
         files.sort(reverse=True)
@@ -77,7 +77,7 @@ class BestTradesBacktest:
 
     def extract_date_from_filename(self, file_path: Path) -> datetime:
         """
-        Extract date from filename (e.g., sp500_best_trades_20260111_1525.xlsx)
+        Extract date from filename (e.g., sp500_watchlist_20260111_1525.xlsx)
 
         Args:
             file_path: Path to file
@@ -101,9 +101,9 @@ class BestTradesBacktest:
 
         return datetime.now()
 
-    def parse_best_trades_excel(self, file_path: Path) -> pd.DataFrame:
+    def parse_watchlist_excel(self, file_path: Path) -> pd.DataFrame:
         """
-        Parse best trades Excel file
+        Parse watchlist Excel file
 
         Args:
             file_path: Path to Excel file
@@ -241,10 +241,10 @@ class BestTradesBacktest:
         self, file_path: Path, holding_period: int = 30
     ) -> pd.DataFrame:
         """
-        Backtest a single best trades report
+        Backtest a single watchlist report
 
         Args:
-            file_path: Path to best trades Excel file
+            file_path: Path to watchlist Excel file
             holding_period: Days to hold for performance measurement
 
         Returns:
@@ -253,7 +253,7 @@ class BestTradesBacktest:
         print(f"\nBacktesting: {file_path.name}")
 
         # Parse the report
-        df = self.parse_best_trades_excel(file_path)
+        df = self.parse_watchlist_excel(file_path)
 
         if df.empty:
             return pd.DataFrame()
@@ -294,6 +294,11 @@ class BestTradesBacktest:
             # Fetch price data
             start_date = report_date + timedelta(days=1)
             end_date = report_date + timedelta(days=max(holding_period, 90) + 10)
+
+            # Don't try to fetch future data
+            today = datetime.now()
+            if end_date > today:
+                end_date = today
 
             price_data = self.fetch_price_history(ticker, start_date, end_date)
 
@@ -336,21 +341,44 @@ class BestTradesBacktest:
             Combined DataFrame with all backtest results
         """
         print(f"=" * 80)
-        print(f"BEST TRADES BACKTEST")
+        print(f"WATCHLIST BACKTEST")
         print(f"=" * 80)
         print(f"Category: {category or 'ALL'}")
         print(f"Holding Period: {holding_period} days")
         print(f"Max Reports: {max_reports}")
 
-        # Find reports
-        files = self.find_best_trades_files(category)
+        # Find files
+        files = self.find_watchlist_files(category)
 
         if not files:
-            print("\n[ERROR] No best trades files found!")
+            print("\n[ERROR] No watchlist files found!")
             return pd.DataFrame()
 
-        print(f"\nFound {len(files)} best trades reports")
-        files = files[:max_reports]
+        print(f"\nFound {len(files)} watchlist reports")
+
+        # Filter out reports that are too recent (need holding_period + buffer days)
+        today = datetime.now()
+        cutoff_date = today - timedelta(days=holding_period + 5)
+
+        valid_files = []
+        for file_path in files[:max_reports]:
+            report_date = self.extract_date_from_filename(file_path)
+            if report_date <= cutoff_date:
+                valid_files.append(file_path)
+
+        if not valid_files:
+            print(
+                f"\n[WARNING] No reports old enough to backtest with {holding_period}-day holding period"
+            )
+            print(f"Reports must be from before {cutoff_date.strftime('%Y-%m-%d')}")
+            return pd.DataFrame()
+
+        if len(valid_files) < len(files[:max_reports]):
+            print(
+                f"Filtered to {len(valid_files)} reports (excluded {len(files[:max_reports]) - len(valid_files)} too recent)"
+            )
+
+        files = valid_files
 
         # Backtest each report
         all_results = []
@@ -542,7 +570,7 @@ class BestTradesBacktest:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Backtest Best Trades Reports")
+    parser = argparse.ArgumentParser(description="Backtest Watchlist Reports")
     parser.add_argument(
         "--category",
         type=str,
@@ -568,7 +596,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Run backtest
-    backtester = BestTradesBacktest(Path(args.results_dir))
+    backtester = WatchlistBacktest(Path(args.results_dir))
     results = backtester.run_backtest(
         category=args.category, max_reports=args.max_reports, holding_period=args.period
     )
@@ -578,7 +606,11 @@ if __name__ == "__main__":
         analysis = backtester.generate_edge_analysis(results, args.period)
         backtester.print_edge_report(analysis)
 
-        # Save results
-        output_file = Path("backtest_results.csv")
+        # Save results to backtest_results/ directory
+        backtest_dir = Path("backtest_results")
+        backtest_dir.mkdir(exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        output_file = backtest_dir / f"backtest_results_{timestamp}.csv"
         results.to_csv(output_file, index=False)
         print(f"\n[OK] Detailed results saved to: {output_file}")

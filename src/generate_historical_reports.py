@@ -49,6 +49,7 @@ def generate_historical_report(
     daily_bars=60,
     weekly_bars=52,
     concurrency=2,
+    use_cache=False,
 ):
     """
     Generate a scanner report as-of a historical date
@@ -61,9 +62,10 @@ def generate_historical_report(
         daily_bars: Number of daily bars
         weekly_bars: Number of weekly bars
         concurrency: Parallel workers (default 2, reduce to 1 if rate limited)
+        use_cache: If True, uses cached data (for regenerating reports with new format)
 
     Rate Limiting:
-        - Cache doesn't help (need fresh data per date)
+        - Cache doesn't help (need fresh data per date) unless use_cache=True
         - Each ticker = 2-3 API calls (daily + weekly data)
         - 100 tickers × 3 calls = 300 API calls per report
         - With 1-2s delays and concurrency=2, expect ~2-5 min per report
@@ -80,22 +82,25 @@ def generate_historical_report(
     regime = analyze_market_regime(
         daily_bars=daily_bars,
         weekly_bars=weekly_bars,
-        as_of_date=as_of_date.strftime("%Y-%m-%d"),
+        as_of_date=as_of_date.strftime("%Y-%m-%d") if not use_cache else None,
     )
 
     # Run scan with date limit
-    print(
-        f"\nScanning {len(tickers)} tickers (data up to {as_of_date.strftime('%Y-%m-%d')})..."
-    )
+    if use_cache:
+        print(f"\nScanning {len(tickers)} tickers (using cached data)...")
+    else:
+        print(
+            f"\nScanning {len(tickers)} tickers (data up to {as_of_date.strftime('%Y-%m-%d')})..."
+        )
 
-    # Pass as_of_date and regime to scan_stocks
+    # Pass as_of_date and regime to scan_stocks (skip as_of_date if using cache)
     results = scan_stocks(
         tickers,
         category=category,
         daily_bars=daily_bars,
         weekly_bars=weekly_bars,
         concurrency=concurrency,
-        as_of_date=as_of_date.strftime("%Y-%m-%d"),
+        as_of_date=as_of_date.strftime("%Y-%m-%d") if not use_cache else None,
         regime=regime,
     )
 
@@ -122,9 +127,9 @@ def generate_historical_report(
     output_dir = results_dir / category_folder
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Generate best trades reports
-    xlsx_file = output_dir / f"{category_folder}_best_trades_{timestamp}.xlsx"
-    pdf_file = output_dir / f"{category_folder}_best_trades_{timestamp}.pdf"
+    # Generate watchlist reports
+    xlsx_file = output_dir / f"{category_folder}_watchlist_{timestamp}.xlsx"
+    pdf_file = output_dir / f"{category_folder}_watchlist_{timestamp}.pdf"
 
     create_best_trades_excel(buy_signals, sell_signals, xlsx_file, category=category)
     create_best_trades_pdf(
@@ -205,6 +210,11 @@ def main():
         default=1,
         help="Parallel workers (default: 1 for safety, use 2 if no rate limit issues)",
     )
+    parser.add_argument(
+        "--use-cache",
+        action="store_true",
+        help="Use cached data instead of fetching fresh (for regenerating reports with new format)",
+    )
 
     args = parser.parse_args()
 
@@ -231,37 +241,41 @@ def main():
 
     # Setup results directory
     results_dir = Path("scanner_results") / "historical_simulation"
-    results_dir.mkdir(parents=True, exist_ok=True)
+    if not args.use_cache:
+        print(f"\n{'='*80}")
+        print(f"RATE LIMITING INFO")
+        print(f"{'='*80}")
+        if args.category == "nasdaq100":
+            ticker_est = 100
+        elif args.category == "sp500":
+            ticker_est = 500
+        elif args.category == "portfolio":
+            ticker_est = 20
+        else:  # all
+            ticker_est = 620
 
-    print(f"Output Directory: {results_dir}")
-
-    # Rate limiting warning
-    print(f"\n{'='*80}")
-    print(f"RATE LIMITING INFO")
-    print(f"{'='*80}")
-    if args.category == "nasdaq100":
-        ticker_est = 100
-    elif args.category == "sp500":
-        ticker_est = 500
-    elif args.category == "portfolio":
-        ticker_est = 20
-    else:  # all
-        ticker_est = 620
-
-    total_calls = ticker_est * len(dates) * 2  # 2 calls per ticker (daily + weekly)
-    print(
-        f"Estimated API calls: ~{total_calls:,} ({ticker_est} tickers × {len(dates)} dates × 2)"
-    )
-    print(f"Estimated time: ~{len(dates) * 2}-{len(dates) * 5} minutes")
-    print(
-        f"Rate limit strategy: {args.concurrency} concurrent workers + 1-2s random delays"
-    )
-    print(f"\nIf rate limited:")
-    print(f"  1. Wait 1 hour")
-    print(
-        f"  2. Resume with --start {dates[len(dates)//2].strftime('%Y-%m-%d')} (skip completed dates)"
-    )
-    print(f"  3. Or reduce --concurrency to 1")
+        total_calls = ticker_est * len(dates) * 2  # 2 calls per ticker (daily + weekly)
+        print(
+            f"Estimated API calls: ~{total_calls:,} ({ticker_est} tickers × {len(dates)} dates × 2)"
+        )
+        print(f"Estimated time: ~{len(dates) * 2}-{len(dates) * 5} minutes")
+        print(
+            f"Rate limit strategy: {args.concurrency} concurrent workers + 1-2s random delays"
+        )
+        print(f"\nIf rate limited:")
+        print(f"  1. Wait 1 hour")
+        print(
+            f"  2. Resume with --start {dates[len(dates)//2].strftime('%Y-%m-%d')} (skip completed dates)"
+        )
+        print(f"  3. Or reduce --concurrency to 1")
+    else:
+        print(f"\n{'='*80}")
+        print(f"USING CACHED DATA - FAST REGENERATION MODE")
+        print(f"{'='*80}")
+        print(f"This will regenerate reports with new format using cached data.")
+        print(
+            f"Estimated time: ~{len(dates) * 0.5}-{len(dates) * 2} minutes (much faster!)"
+        )
 
     # Determine which categories to scan
     categories = []
@@ -301,6 +315,7 @@ def main():
                     args.daily_bars,
                     args.weekly_bars,
                     args.concurrency,
+                    args.use_cache,
                 )
             except Exception as e:
                 print(f"[ERROR] Failed to generate {category_name} report: {e}")

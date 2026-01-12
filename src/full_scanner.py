@@ -121,9 +121,9 @@ def determine_regime_tier(signal, weekly_state, daily_state):
         }
 
 
-def analyze_market_regime(daily_bars=60, weekly_bars=52, as_of_date=None):
+def analyze_market_regime(daily_bars=60, weekly_bars=52, as_of_date=None, ticker="QQQ"):
     """
-    Analyze QQQ (NASDAQ 100 ETF) to determine market regime.
+    Analyze market regime using specified ETF (QQQ for NASDAQ 100, SPY for S&P 500).
 
     This is MANDATORY and runs before all stock scanning.
     The regime determines what trades are allowed:
@@ -135,20 +135,26 @@ def analyze_market_regime(daily_bars=60, weekly_bars=52, as_of_date=None):
         daily_bars: Number of daily bars for analysis
         weekly_bars: Number of weekly bars for analysis
         as_of_date: Optional historical date for backtesting
+        ticker: ETF ticker to analyze (default: "QQQ", can use "SPY")
 
     Returns:
         dict with regime info (tier, signal, states, emoji, message, etc.)
     """
+    etf_name = (
+        "NASDAQ 100 ETF"
+        if ticker == "QQQ"
+        else "S&P 500 ETF" if ticker == "SPY" else ticker
+    )
     print("\n" + "=" * 80)
-    print("MARKET REGIME ANALYSIS (QQQ - NASDAQ 100 ETF)")
+    print(f"MARKET REGIME ANALYSIS ({ticker} - {etf_name})")
     print("=" * 80)
 
     try:
-        # Analyze QQQ using same technical analysis
-        qqq_result = analyze_ticker("QQQ", daily_bars, weekly_bars, as_of_date)
+        # Analyze ETF using same technical analysis
+        qqq_result = analyze_ticker(ticker, daily_bars, weekly_bars, as_of_date)
 
         if "error" in qqq_result:
-            print(f"⚠️  WARNING: Could not analyze QQQ: {qqq_result['error']}")
+            print(f"⚠️  WARNING: Could not analyze {ticker}: {qqq_result['error']}")
             print("⚠️  DEFAULTING TO ORANGE (CAUTIOUS) - No new buys allowed")
             return {
                 "tier": "ORANGE",
@@ -157,49 +163,54 @@ def analyze_market_regime(daily_bars=60, weekly_bars=52, as_of_date=None):
                 "daily_state": "N/A",
                 "color": "orange",
                 "emoji": "⚠️",
-                "message": "QQQ analysis failed - Defaulting to cautious mode",
+                "message": f"{ticker} analysis failed - Defaulting to cautious mode",
                 "allow_buys": False,
                 "filter_mode": "exits_only",
-                "qqq_price": None,
-                "qqq_rsi": None,
+                "etf_ticker": ticker,
+                "etf_price": None,
+                "etf_rsi": None,
             }
 
         # Extract signal and states
         signal = qqq_result.get("signal", "UNKNOWN")
         weekly_state = qqq_result.get("weekly_state", "N/A")
         daily_state = qqq_result.get("daily_state", "N/A")
-        qqq_price = qqq_result.get("current_price", None)
-        qqq_rsi = qqq_result.get("rsi", None)
+        etf_price = qqq_result.get("current_price", None)
+        etf_rsi = qqq_result.get("rsi", None)
 
         # Determine regime tier
         regime = determine_regime_tier(signal, weekly_state, daily_state)
 
-        # Add QQQ-specific info
+        # Add ETF-specific info
         regime["signal"] = signal
         regime["weekly_state"] = weekly_state
         regime["daily_state"] = daily_state
-        regime["qqq_price"] = qqq_price
-        regime["qqq_rsi"] = qqq_rsi
+        regime["etf_ticker"] = ticker
+        regime["etf_price"] = etf_price
+        regime["etf_rsi"] = etf_rsi
+        # Keep legacy keys for backward compatibility
+        regime["qqq_price"] = etf_price
+        regime["qqq_rsi"] = etf_rsi
 
         # Display regime (with Windows console fallback)
         try:
             print(f"\n{regime['emoji']} MARKET REGIME: {regime['tier']}")
-            print(f"   QQQ Signal: {signal}")
+            print(f"   {ticker} Signal: {signal}")
             print(f"   Weekly State: {weekly_state} | Daily State: {daily_state}")
             print(
-                f"   QQQ Price: ${qqq_price:.2f} | RSI: {qqq_rsi:.1f}"
-                if qqq_price and qqq_rsi
+                f"   {ticker} Price: ${etf_price:.2f} | RSI: {etf_rsi:.1f}"
+                if etf_price and etf_rsi
                 else ""
             )
             print(f"\n   {regime['message']}")
         except UnicodeEncodeError:
             # Windows console fallback - skip emojis
             print(f"\nMARKET REGIME: {regime['tier']}")
-            print(f"   QQQ Signal: {signal}")
+            print(f"   {ticker} Signal: {signal}")
             print(f"   Weekly State: {weekly_state} | Daily State: {daily_state}")
             print(
-                f"   QQQ Price: ${qqq_price:.2f} | RSI: {qqq_rsi:.1f}"
-                if qqq_price and qqq_rsi
+                f"   {ticker} Price: ${etf_price:.2f} | RSI: {etf_rsi:.1f}"
+                if etf_price and etf_rsi
                 else ""
             )
             print(f"\n   {regime['message']}")
@@ -208,7 +219,7 @@ def analyze_market_regime(daily_bars=60, weekly_bars=52, as_of_date=None):
         return regime
 
     except Exception as e:
-        print(f"⚠️  ERROR analyzing QQQ: {str(e)}")
+        print(f"⚠️  ERROR analyzing {ticker}: {str(e)}")
         print("⚠️  DEFAULTING TO ORANGE (CAUTIOUS) - No new buys allowed")
         return {
             "tier": "ORANGE",
@@ -217,9 +228,12 @@ def analyze_market_regime(daily_bars=60, weekly_bars=52, as_of_date=None):
             "daily_state": "N/A",
             "color": "orange",
             "emoji": "⚠️",
-            "message": f"QQQ analysis error: {str(e)}",
+            "message": f"{ticker} analysis error: {str(e)}",
             "allow_buys": False,
             "filter_mode": "exits_only",
+            "etf_ticker": ticker,
+            "etf_price": None,
+            "etf_rsi": None,
             "qqq_price": None,
             "qqq_rsi": None,
         }
@@ -649,9 +663,6 @@ def filter_buy_signals(
                 filtered = filtered[
                     filtered["buy_quality"].isin(["EXCELLENT", "GOOD", "OK"])
                 ]
-            safe_print(
-                f"\\n{regime['emoji']} REGIME FILTER: GREEN - Normal filtering (EXCELLENT, GOOD, OK quality)"
-            )
 
         # YELLOW: Ultra-strict filtering (EXCELLENT + SAFE ENTRY + 3:1+ Vol R:R only)
         elif filter_mode == "strict":
@@ -672,11 +683,6 @@ def filter_buy_signals(
             # Must have Vol R:R >= 3.0
             if "vol_rr" in filtered.columns:
                 filtered = filtered[filtered["vol_rr"] >= 3.0]
-
-            safe_print(
-                f"\\n{regime['emoji']} REGIME FILTER: YELLOW - Ultra-strict (EXCELLENT + SAFE ENTRY + 3:1+ Vol R:R only)"
-            )
-            print(f"   Market is selective: Only highest-quality setups allowed")
 
     return filtered.sort_values("ticker")
 
@@ -726,16 +732,18 @@ def filter_sell_signals(df, quality_filter=False):
 
 def cleanup_old_scans(results_dir, max_files=1, archive_retention_days=60):
     """
-    Keep only the most recent scan files for EACH category (SP500, NASDAQ100, Portfolio)
-    Move older ones to archive, delete archive files older than archive_retention_days
+    Keep only the most recent scan SETS for EACH category (SP500, NASDAQ100, Portfolio)
+    Each scan set = 4 files with same timestamp (analysis, scanner_report, best_trades xlsx/pdf)
+    Move older scan sets to archive, delete archive files older than archive_retention_days
 
     Args:
         results_dir: Directory containing scan results
-        max_files: Number of most recent files to keep per category
+        max_files: Number of most recent scan sets to keep per category (default: 1)
         archive_retention_days: Days to keep files in archive before deletion
     """
     from datetime import datetime, timedelta
     import time
+    import re
 
     archive_dir = results_dir / "archive"
     archive_dir.mkdir(exist_ok=True)
@@ -743,59 +751,69 @@ def cleanup_old_scans(results_dir, max_files=1, archive_retention_days=60):
     total_archived = 0
 
     # Define categories and their file patterns
-    categories = [
-        (
-            "sp500",
-            "sp500_analysis_*.xlsx",
-            "scanner_report_sp500_*.pdf",
-            "sp500_best_trades_*.xlsx",
-            "sp500_best_trades_*.pdf",
-        ),
-        (
-            "nasdaq100",
-            "nasdaq100_analysis_*.xlsx",
-            "scanner_report_nasdaq100_*.pdf",
-            "nasdaq100_best_trades_*.xlsx",
-            "nasdaq100_best_trades_*.pdf",
-        ),
-        (
-            "portfolio",
-            "portfolio_scanner_*.xlsx",
-            "scanner_report_portfolio_*.pdf",
-            "portfolio_best_trades_*.xlsx",
-            "portfolio_best_trades_*.pdf",
-        ),
-    ]
+    categories = {
+        "sp500": [
+            "sp500_playbook_*.xlsx",
+            "sp500_playbook_*.pdf",
+            "sp500_watchlist_*.xlsx",
+            "sp500_watchlist_*.pdf",
+        ],
+        "nasdaq100": [
+            "nasdaq100_playbook_*.xlsx",
+            "nasdaq100_playbook_*.pdf",
+            "nasdaq100_watchlist_*.xlsx",
+            "nasdaq100_watchlist_*.pdf",
+        ],
+        "portfolio": [
+            "portfolio_playbook_*.xlsx",
+            "portfolio_playbook_*.pdf",
+            "portfolio_watchlist_*.xlsx",
+            "portfolio_watchlist_*.pdf",
+        ],
+    }
 
     # Process each category separately
-    for category_info in categories:
-        cat_name = category_info[0]
-        patterns = category_info[1:]
-
-        # Create category subfolder and archive subfolder
+    for cat_name, patterns in categories.items():
         cat_dir = results_dir / cat_name
+        if not cat_dir.exists():
+            continue
+
         cat_archive_dir = archive_dir / cat_name
         cat_archive_dir.mkdir(parents=True, exist_ok=True)
 
-        # Get all files for this category
-        for pattern in patterns:
-            files = sorted(
-                cat_dir.glob(pattern),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
+        # Group files by timestamp (YYYYMMDD_HHMM)
+        timestamp_groups = {}
 
-            # Move files beyond max_files to archive
-            for old_file in files[max_files:]:
+        for pattern in patterns:
+            for file_path in cat_dir.glob(pattern):
+                # Extract timestamp from filename (e.g., 20260111_1844)
+                match = re.search(r"(\d{8}_\d{4})", file_path.name)
+                if match:
+                    timestamp = match.group(1)
+                    if timestamp not in timestamp_groups:
+                        timestamp_groups[timestamp] = []
+                    timestamp_groups[timestamp].append(file_path)
+
+        # Sort timestamps (newest first)
+        sorted_timestamps = sorted(timestamp_groups.keys(), reverse=True)
+
+        # Archive all files from old scan sets (beyond max_files)
+        for old_timestamp in sorted_timestamps[max_files:]:
+            for old_file in timestamp_groups[old_timestamp]:
                 archive_path = cat_archive_dir / old_file.name
                 old_file.rename(archive_path)
                 print(f"  [ARCHIVED] ({cat_name}): {old_file.name}")
                 total_archived += 1
 
     if total_archived > 0:
-        print(f"  [OK] Archived {total_archived} file(s), kept {max_files} most recent")
+        kept_scans = max_files
+        print(
+            f"  [OK] Archived {total_archived} file(s), kept {kept_scans} most recent scan set(s)"
+        )
     else:
-        print(f"  [OK] No files to archive (only {max_files} most recent exist)")
+        print(
+            f"  [OK] No files to archive (only {max_files} most recent scan set(s) exist)"
+        )
 
     # Delete archive files older than retention period
     cutoff_time = time.time() - (
@@ -1675,30 +1693,57 @@ def create_pdf_report(
 
     # === PAGE 1: DASHBOARD ===
     report_title = category.replace("&", "&amp;")
-    cover_title = f"Trading Playbook - {report_title}<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
+    # Format title based on category
+    if category == "NASDAQ 100":
+        cover_title = f"NASDAQ 100 - PLAYBOOK<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
+    elif category == "S&P 500":
+        cover_title = f"S&amp;P 500 - PLAYBOOK<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
+    else:
+        cover_title = f"{report_title} - PLAYBOOK<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
     elements.append(Paragraph(cover_title, title_style))
-    elements.append(Spacer(1, 0.3 * inch))
+    elements.append(Spacer(1, 0.2 * inch))
 
-    # Market Regime Banner (if provided)
+    # Market Regime Information (if provided)
     if regime:
-        regime_color = {
-            "GREEN": "#27ae60",  # green
-            "YELLOW": "#f39c12",  # yellow/orange
-            "ORANGE": "#e67e22",  # orange
-            "RED": "#c0392b",  # red
-        }.get(
-            regime["tier"], "#95a5a6"
-        )  # gray default
+        etf_ticker = regime.get("etf_ticker", "QQQ")
+        etf_name = (
+            "NASDAQ 100"
+            if etf_ticker == "QQQ"
+            else "S&amp;P 500" if etf_ticker == "SPY" else etf_ticker
+        )
+        tier = regime["tier"]
+        signal = regime["signal"]
+        allow_buys = "Yes" if regime["allow_buys"] else "No"
 
-        regime_banner = f"""
-        <para align=center bgcolor='{regime_color}' textColor='white'>
-        <b><font size=14>{regime['emoji']} MARKET REGIME: {regime['tier']}</font></b><br/>
-        <font size=11>QQQ Signal: {regime['signal']} | Weekly: {regime['weekly_state']} | Daily: {regime['daily_state']}</font><br/>
-        <font size=10>{regime['message']}</font>
+        # Determine action and filtering text based on tier
+        if tier == "GREEN":
+            action = "Trade normally"
+            filtering = "EXCELLENT, GOOD, OK quality entries allowed"
+            tier_color = "green"
+        elif tier == "YELLOW":
+            action = "Ultra-selective, only highest-conviction trades"
+            filtering = "EXCELLENT quality + SAFE ENTRY + 3:1+ Vol R:R required"
+            tier_color = "#CC8800"  # Dark yellow/orange for visibility
+        elif tier == "ORANGE":
+            action = "No new buys, exits only"
+            filtering = "Portfolio management (reduce positions)"
+            tier_color = "orange"
+        else:  # RED
+            action = "No new buys, preserve capital"
+            filtering = "Portfolio management (aggressive selling)"
+            tier_color = "red"
+
+        regime_info = f"""
+        <para align=center>
+        <b><font size=12 color="{tier_color}">● {tier}</font> - {etf_name} {regime['message']}</b><br/>
+        <font size=10>Signal: {signal}</font><br/>
+        <font size=10>Action: {action}</font><br/>
+        <font size=10>Filtering: {filtering}</font><br/>
+        <font size=10>Buys allowed: {allow_buys}</font>
         </para>
         """
-        elements.append(Paragraph(regime_banner, styles["Normal"]))
-        elements.append(Spacer(1, 0.2 * inch))
+        elements.append(Paragraph(regime_info, styles["Normal"]))
+        elements.append(Spacer(1, 0.3 * inch))
 
     # Scanner summary
     summary_text = f"""
@@ -2156,123 +2201,63 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category="", regime=Non
 
     # === TITLE PAGE ===
     report_title = category.replace("&", "&amp;")
-    cover_title = f"Best Trading Setups<br/>{report_title}<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
+    # Format title based on category
+    if category == "NASDAQ 100":
+        cover_title = f"NASDAQ 100 - WATCHLIST<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
+    elif category == "S&P 500":
+        cover_title = f"S&amp;P 500 - WATCHLIST<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
+    else:
+        cover_title = f"{report_title} - WATCHLIST<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
     elements.append(Paragraph(cover_title, title_style))
-    elements.append(Spacer(1, 0.3 * inch))
+    elements.append(Spacer(1, 0.2 * inch))
 
-    # Market Regime Banner (if provided)
+    # Market Regime Information (if provided)
     if regime:
-        regime_color = {
-            "GREEN": "#27ae60",  # green
-            "YELLOW": "#f39c12",  # yellow/orange
-            "ORANGE": "#e67e22",  # orange
-            "RED": "#c0392b",  # red
-        }.get(
-            regime["tier"], "#95a5a6"
-        )  # gray default
+        etf_ticker = regime.get("etf_ticker", "QQQ")
+        etf_name = (
+            "NASDAQ 100"
+            if etf_ticker == "QQQ"
+            else "S&amp;P 500" if etf_ticker == "SPY" else etf_ticker
+        )
+        tier = regime["tier"]
+        signal = regime["signal"]
+        allow_buys = "Yes" if regime["allow_buys"] else "No"
 
-        regime_banner = f"""
-        <para align=center bgcolor='{regime_color}' textColor='white'>
-        <b><font size=14>{regime['emoji']} MARKET REGIME: {regime['tier']}</font></b><br/>
-        <font size=11>QQQ: {regime['signal']} | {regime['weekly_state']} / {regime['daily_state']}</font><br/>
-        <font size=10>{regime['message']}</font>
+        # Determine action and filtering text based on tier
+        if tier == "GREEN":
+            action = "Trade normally"
+            filtering = "EXCELLENT, GOOD, OK quality entries allowed"
+            tier_color = "green"
+        elif tier == "YELLOW":
+            action = "Ultra-selective, only highest-conviction trades"
+            filtering = "EXCELLENT quality + SAFE ENTRY + 3:1+ Vol R:R required"
+            tier_color = "#CC8800"  # Dark yellow/orange for visibility
+        elif tier == "ORANGE":
+            action = "No new buys, exits only"
+            filtering = "Portfolio management (reduce positions)"
+            tier_color = "orange"
+        else:  # RED
+            action = "No new buys, preserve capital"
+            filtering = "Portfolio management (aggressive selling)"
+            tier_color = "red"
+
+        regime_info = f"""
+        <para align=center>
+        <b><font size=12 color="{tier_color}">● {tier}</font> - {etf_name} {regime['message']}</b><br/>
+        <font size=10>Signal: {signal}</font><br/>
+        <font size=10>Action: {action}</font><br/>
+        <font size=10>Filtering: {filtering}</font><br/>
+        <font size=10>Buys allowed: {allow_buys}</font>
         </para>
         """
-        elements.append(Paragraph(regime_banner, styles["Normal"]))
-        elements.append(Spacer(1, 0.2 * inch))
+        elements.append(Paragraph(regime_info, styles["Normal"]))
+        elements.append(Spacer(1, 0.3 * inch))
 
-    # Calculate Vol R:R and rank - OPTION 1 approach
-    buy_scored = buy_df.copy() if not buy_df.empty else pd.DataFrame()
-    sell_scored = sell_df.copy() if not sell_df.empty else pd.DataFrame()
+    # === PAGE 2: GLOSSARY OF TERMS ===
+    from reportlab.platypus import PageBreak
 
-    if not buy_scored.empty:
-        # Filter for EXCELLENT and GOOD entry quality only (stop-aware)
-        quality_col = (
-            "entry_quality" if "entry_quality" in buy_scored.columns else "buy_quality"
-        )
-        buy_scored = buy_scored[
-            buy_scored[quality_col].isin(["EXCELLENT", "GOOD"])
-        ].copy()
+    elements.append(PageBreak())
 
-        if not buy_scored.empty:
-            # Calculate Vol R:R for ranking
-            def calc_vol_rr(row):
-                price = row.get("current_price", 0)
-                r1 = row.get("r1", 0)
-                suggested_stop = row.get("suggested_stop_pct", 5.0)
-
-                reward = (
-                    ((r1 - price) / price * 100)
-                    if price > 0 and r1 > 0 and r1 > price
-                    else 0
-                )
-                return (
-                    reward / suggested_stop if suggested_stop > 0 and reward > 0 else 0
-                )
-
-            buy_scored["vol_rr"] = buy_scored.apply(calc_vol_rr, axis=1)
-
-            # Sort by Vol R:R (highest first), take top 15
-            buy_scored = buy_scored.sort_values("vol_rr", ascending=False).head(15)
-
-    if not sell_scored.empty:
-        # Filter for EXCELLENT and GOOD short entry quality
-        quality_col = (
-            "short_entry_quality"
-            if "short_entry_quality" in sell_scored.columns
-            else "r1_quality"
-        )
-        sell_scored = sell_scored[
-            sell_scored[quality_col].isin(["EXCELLENT", "GOOD"])
-        ].copy()
-
-        if not sell_scored.empty:
-            # Calculate Vol R:R for ranking
-            def calc_vol_rr(row):
-                price = row.get("current_price", 0)
-                s1 = row.get("s1", 0)
-                suggested_stop = row.get("suggested_stop_pct", 5.0)
-
-                reward = (
-                    ((price - s1) / price * 100)
-                    if price > 0 and s1 > 0 and price > s1
-                    else 0
-                )
-                return (
-                    reward / suggested_stop if suggested_stop > 0 and reward > 0 else 0
-                )
-
-            sell_scored["vol_rr"] = sell_scored.apply(calc_vol_rr, axis=1)
-
-            # Sort by Vol R:R (highest first), take top 15
-            sell_scored = sell_scored.sort_values("vol_rr", ascending=False).head(15)
-
-    # Summary
-    summary_text = f"""
-    <b>Best Trading Setups - Volatility-Based Ranking</b><br/>
-    <br/>
-    <b>Buy Setups:</b> {len(buy_scored)} EXCELLENT/GOOD quality (stop-aware) setups<br/>
-    <b>Sell Setups:</b> {len(sell_scored)} EXCELLENT/GOOD quality (stop-aware) setups<br/>
-    <br/>
-    <b>Selection Criteria:</b><br/>
-    • <b>Quality Filter (Buys):</b> Only EXCELLENT or GOOD quality (supports within 8% stop tolerance)<br/>
-    • <b>Quality Filter (Shorts):</b> Only EXCELLENT or GOOD quality (resistances above 8% stop tolerance)<br/>
-    • <b>Ranking:</b> Sorted by Vol R:R (Volatility Risk/Reward Ratio) - highest first<br/>
-    <br/>
-    <b>What is Vol R:R?</b><br/>
-    The ratio of potential reward (to Target R1/S1) divided by volatility-based stop loss %.<br/>
-    Example: +12% reward / 6% vol stop = 2:1 Vol R:R<br/>
-    <br/>
-    <b>Quality Ratings (Stop-Aware):</b><br/>
-    • <b>BUY ENTRIES:</b> Multiple strong supports within your 8% stop range protect long positions<br/>
-    • <b>SHORT ENTRIES:</b> Multiple strong resistances above your 8% stop protect short positions<br/>
-    • Filters out entries where good supports/resistances are beyond your stop tolerance<br/>
-    <br/>
-    <i>Focus on higher Vol R:R setups (2:1 or better) for optimal risk-adjusted returns.</i>
-    """
-    elements.append(Paragraph(summary_text, styles["Normal"]))
-
-    # === GLOSSARY OF TERMS (moved to start) ===
     elements.append(Paragraph("GLOSSARY OF TERMS", section_style))
 
     glossary_items = [
@@ -2338,9 +2323,104 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category="", regime=Non
         else:
             elements.append(Spacer(1, 0.06 * inch))
 
+    # Add spacing before summary section
+    elements.append(Spacer(1, 0.2 * inch))
+
+    # === CALCULATE VOL R:R AND RANK ===
+    buy_scored = buy_df.copy() if not buy_df.empty else pd.DataFrame()
+    sell_scored = sell_df.copy() if not sell_df.empty else pd.DataFrame()
+
+    if not buy_scored.empty:
+        # Filter for EXCELLENT and GOOD entry quality only (stop-aware)
+        quality_col = (
+            "entry_quality" if "entry_quality" in buy_scored.columns else "buy_quality"
+        )
+        buy_scored = buy_scored[
+            buy_scored[quality_col].isin(["EXCELLENT", "GOOD"])
+        ].copy()
+
+        if not buy_scored.empty:
+            # Calculate Vol R:R for ranking
+            def calc_vol_rr(row):
+                price = row.get("current_price", 0)
+                r1 = row.get("r1", 0)
+                suggested_stop = row.get("suggested_stop_pct", 5.0)
+
+                reward = (
+                    ((r1 - price) / price * 100)
+                    if price > 0 and r1 > 0 and r1 > price
+                    else 0
+                )
+                return (
+                    reward / suggested_stop if suggested_stop > 0 and reward > 0 else 0
+                )
+
+            buy_scored["vol_rr"] = buy_scored.apply(calc_vol_rr, axis=1)
+
+            # Sort by Vol R:R (highest first), take top 15
+            buy_scored = buy_scored.sort_values("vol_rr", ascending=False).head(15)
+
+    if not sell_scored.empty:
+        # Filter for EXCELLENT and GOOD short entry quality
+        quality_col = (
+            "short_entry_quality"
+            if "short_entry_quality" in sell_scored.columns
+            else "r1_quality"
+        )
+        sell_scored = sell_scored[
+            sell_scored[quality_col].isin(["EXCELLENT", "GOOD"])
+        ].copy()
+
+        if not sell_scored.empty:
+            # Calculate Vol R:R for ranking
+            def calc_vol_rr(row):
+                price = row.get("current_price", 0)
+                s1 = row.get("s1", 0)
+                suggested_stop = row.get("suggested_stop_pct", 5.0)
+
+                reward = (
+                    ((price - s1) / price * 100)
+                    if price > 0 and s1 > 0 and price > s1
+                    else 0
+                )
+                return (
+                    reward / suggested_stop if suggested_stop > 0 and reward > 0 else 0
+                )
+
+            sell_scored["vol_rr"] = sell_scored.apply(calc_vol_rr, axis=1)
+
+            # Sort by Vol R:R (highest first), take top 15
+            sell_scored = sell_scored.sort_values("vol_rr", ascending=False).head(15)
+
+    # Summary section (on page 2, after glossary)
+    summary_text = f"""
+    <b>Best Trading Setups - Volatility-Based Ranking</b><br/>
+    <br/>
+    <b>Buy Setups:</b> {len(buy_scored)} EXCELLENT/GOOD quality (stop-aware) setups<br/>
+    <b>Sell Setups:</b> {len(sell_scored)} EXCELLENT/GOOD quality (stop-aware) setups<br/>
+    <br/>
+    <b>Selection Criteria:</b><br/>
+    • <b>Quality Filter (Buys):</b> Only EXCELLENT or GOOD quality (supports within 8% stop tolerance)<br/>
+    • <b>Quality Filter (Shorts):</b> Only EXCELLENT or GOOD quality (resistances above 8% stop tolerance)<br/>
+    • <b>Ranking:</b> Sorted by Vol R:R (Volatility Risk/Reward Ratio) - highest first<br/>
+    <br/>
+    <b>What is Vol R:R?</b><br/>
+    The ratio of potential reward (to Target R1/S1) divided by volatility-based stop loss %.<br/>
+    Example: +12% reward / 6% vol stop = 2:1 Vol R:R<br/>
+    <br/>
+    <b>Quality Ratings (Stop-Aware):</b><br/>
+    • <b>BUY ENTRIES:</b> Multiple strong supports within your 8% stop range protect long positions<br/>
+    • <b>SHORT ENTRIES:</b> Multiple strong resistances above your 8% stop protect short positions<br/>
+    • Filters out entries where good supports/resistances are beyond your stop tolerance<br/>
+    <br/>
+    <i>Focus on higher Vol R:R setups (2:1 or better) for optimal risk-adjusted returns.</i>
+    """
+    elements.append(Paragraph(summary_text, styles["Normal"]))
+
+    # Page break after page 2 content
     elements.append(PageBreak())
 
-    # === TOP BUY SETUPS ===
+    # === PAGE 3+: TOP BUY SETUPS ===
     if not buy_scored.empty:
         elements.append(Paragraph(f"TOP {len(buy_scored)} BUY SETUPS", section_style))
         elements.append(Spacer(1, 0.1 * inch))
@@ -2579,8 +2659,8 @@ if __name__ == "__main__":
 
         if not sp500_buy.empty or not sp500_sell.empty:
             # Save S&P 500 results
-            xlsx_path = results_dir / f"sp500_analysis_{timestamp}.xlsx"
-            pdf_path = results_dir / f"scanner_report_sp500_{timestamp}.pdf"
+            xlsx_path = results_dir / f"sp500_playbook_{timestamp}.xlsx"
+            pdf_path = results_dir / f"sp500_playbook_{timestamp}.pdf"
 
             create_excel_output(sp500_buy, sp500_sell, xlsx_path, category="S&P 500")
             create_pdf_report(
@@ -2592,11 +2672,9 @@ if __name__ == "__main__":
 
             # Create Best Trades reports
             best_trades_xlsx = (
-                results_dir / "sp500" / f"sp500_best_trades_{timestamp}.xlsx"
+                results_dir / "sp500" / f"sp500_watchlist_{timestamp}.xlsx"
             )
-            best_trades_pdf = (
-                results_dir / "sp500" / f"sp500_best_trades_{timestamp}.pdf"
-            )
+            best_trades_pdf = results_dir / "sp500" / f"sp500_watchlist_{timestamp}.pdf"
             (results_dir / "sp500").mkdir(exist_ok=True)
             create_best_trades_excel(
                 sp500_buy, sp500_sell, best_trades_xlsx, category="S&P 500"
@@ -2637,8 +2715,8 @@ if __name__ == "__main__":
 
         if not nasdaq100_buy.empty or not nasdaq100_sell.empty:
             # Save NASDAQ 100 results
-            xlsx_path = results_dir / f"nasdaq100_analysis_{timestamp}.xlsx"
-            pdf_path = results_dir / f"scanner_report_nasdaq100_{timestamp}.pdf"
+            xlsx_path = results_dir / f"nasdaq100_playbook_{timestamp}.xlsx"
+            pdf_path = results_dir / f"nasdaq100_playbook_{timestamp}.pdf"
 
             create_excel_output(
                 nasdaq100_buy, nasdaq100_sell, xlsx_path, category="NASDAQ 100"
@@ -2711,8 +2789,8 @@ if __name__ == "__main__":
             print(f"  - {len(portfolio_buy)} with FULL HOLD + ADD signal")
 
             # Save ALL portfolio results (not filtered)
-            xlsx_path = results_dir / f"portfolio_scanner_{timestamp}.xlsx"
-            pdf_path = results_dir / f"scanner_report_portfolio_{timestamp}.pdf"
+            xlsx_path = results_dir / f"portfolio_playbook_{timestamp}.xlsx"
+            pdf_path = results_dir / f"portfolio_playbook_{timestamp}.pdf"
 
             # Pass ALL results for portfolio
             create_portfolio_excel(portfolio_results, xlsx_path, category="Portfolio")

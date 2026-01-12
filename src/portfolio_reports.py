@@ -89,7 +89,7 @@ def create_trading_playbook_pdf(portfolio_data, output_path, timestamp_str):
     )
 
     # === PAGE 1: DASHBOARD ===
-    cover_title = f"Trading Playbook<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
+    cover_title = f"Portfolio Playbook<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
     elements.append(Paragraph(cover_title, title_style))
     elements.append(Spacer(1, 0.3 * inch))
 
@@ -799,7 +799,7 @@ def cleanup_old_reports(results_dir, max_files=3, archive_retention_days=90):
 
     # Get all PDF and Excel files
     pdf_files = sorted(
-        results_dir.glob("trading_playbook_*.pdf"),
+        results_dir.glob("portfolio_playbook_*.pdf"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
