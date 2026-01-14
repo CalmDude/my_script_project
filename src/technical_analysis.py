@@ -1643,12 +1643,22 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52, as_of_date=None):
             else:
                 end_date = as_of_date
             today = end_date.strftime("%Y-%m-%d")
+            # Calculate start date for historical data (3 years back from as_of_date)
+            start_date_daily = end_date - timedelta(days=3 * 365)
+            start_date_weekly = end_date - timedelta(days=10 * 365)
         else:
             end_date = datetime.now()
             today = end_date.strftime("%Y-%m-%d")
+            start_date_daily = None
+            start_date_weekly = None
 
         # Daily data - fetch up to end_date
-        daily = stock.history(period="3y", end=end_date)
+        # When using historical simulation, must use start/end dates instead of period
+        # because yfinance ignores 'end' parameter when 'period' is used
+        if as_of_date:
+            daily = stock.history(start=start_date_daily, end=end_date)
+        else:
+            daily = stock.history(period="3y")
         if daily.empty:
             return {"ticker": ticker, "error": "no daily data"}
 
@@ -1671,7 +1681,13 @@ def analyze_ticker(ticker, daily_bars=60, weekly_bars=52, as_of_date=None):
             price_note = "pre-market" if "preMarketPrice" in info else "last close"
 
         # Weekly data - fetch up to end_date
-        weekly = stock.history(period="10y", interval="1wk", end=end_date)
+        # When using historical simulation, must use start/end dates instead of period
+        if as_of_date:
+            weekly = stock.history(
+                start=start_date_weekly, end=end_date, interval="1wk"
+            )
+        else:
+            weekly = stock.history(period="10y", interval="1wk")
         if weekly.empty:
             return {"ticker": ticker, "error": "no weekly data"}
 

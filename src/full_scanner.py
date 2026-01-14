@@ -2144,7 +2144,9 @@ def create_pdf_report(
     print(f"[OK] PDF report created: {output_file}")
 
 
-def create_best_trades_pdf(buy_df, sell_df, output_file, category="", regime=None):
+def create_best_trades_pdf(
+    buy_df, sell_df, output_file, category="", regime=None, as_of_date=None
+):
     """
     Create PDF with ranked best trading opportunities
 
@@ -2154,6 +2156,7 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category="", regime=Non
         output_file: Path to save PDF file
         category: Label (e.g., 'S&P 500', 'NASDAQ 100')
         regime: Market regime dict from analyze_market_regime() (optional, for display)
+        as_of_date: Optional date string (YYYY-MM-DD) or datetime for historical reports
     """
     from reportlab.lib.pagesizes import letter
     from reportlab.lib import colors
@@ -2201,13 +2204,24 @@ def create_best_trades_pdf(buy_df, sell_df, output_file, category="", regime=Non
 
     # === TITLE PAGE ===
     report_title = category.replace("&", "&amp;")
+    # Use as_of_date if provided, otherwise current date
+    if as_of_date:
+        if isinstance(as_of_date, str):
+            report_date = datetime.strptime(as_of_date, "%Y-%m-%d")
+        else:
+            report_date = as_of_date
+    else:
+        report_date = datetime.now()
+
+    date_str = report_date.strftime("%B %d, %Y")
+
     # Format title based on category
     if category == "NASDAQ 100":
-        cover_title = f"NASDAQ 100 - WATCHLIST<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
+        cover_title = f"NASDAQ 100 - WATCHLIST<br/><font size=14>{date_str}</font>"
     elif category == "S&P 500":
-        cover_title = f"S&amp;P 500 - WATCHLIST<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
+        cover_title = f"S&amp;P 500 - WATCHLIST<br/><font size=14>{date_str}</font>"
     else:
-        cover_title = f"{report_title} - WATCHLIST<br/><font size=14>{datetime.now().strftime('%B %d, %Y')}</font>"
+        cover_title = f"{report_title} - WATCHLIST<br/><font size=14>{date_str}</font>"
     elements.append(Paragraph(cover_title, title_style))
     elements.append(Spacer(1, 0.2 * inch))
 

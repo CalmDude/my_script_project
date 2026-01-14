@@ -61,13 +61,13 @@ python src/full_scanner.py --as-of-date 2025-07-01
 ### First-Time Setup (Recommended Path)
 1. Test system: `python test_historical_scan.py`
 2. Generate 3 months NASDAQ 100: `python src/generate_historical_reports.py --start 2025-10-01 --category nasdaq100`
-3. Run backtest: `python src/backtest_best_trades.py --results-dir scanner_results/historical_simulation`
-4. Review in notebook: Open `notebooks/backtest_best_trades.ipynb`
+3. Run backtest: `python src/backtest_watchlist.py --results-dir scanner_results/historical_simulation`
+4. Review in notebook: Open `notebooks/backtest_watchlist.ipynb`
 
 ### Full 6-Month Analysis
 1. Generate data: `python src/generate_historical_reports.py --start 2025-07-01 --category nasdaq100`
-2. Backtest: `python src/backtest_best_trades.py --results-dir scanner_results/historical_simulation`
-3. Analyze: Review charts in `backtest_best_trades.ipynb`
+2. Backtest: `python src/backtest_watchlist.py --results-dir scanner_results/historical_simulation`
+3. Analyze: Review charts in `backtest_watchlist.ipynb`
 4. Optimize: Adjust filters based on edge analysis
 
 **Note:** NASDAQ 100 (~100 stocks) is recommended over S&P 500 (~500 stocks) for initial testing to avoid rate limits.
@@ -182,9 +182,9 @@ Example: `sp500_best_trades_20250701_0900.xlsx`
 python src/generate_historical_reports.py --start 2025-10-01 --category nasdaq100
 
 # 2. Run backtest (1-2 min)
-python src/backtest_best_trades.py --results-dir scanner_results/historical_simulation
+python src/backtest_watchlist.py --results-dir scanner_results/historical_simulation
 
-# 3. Open backtest_best_trades.ipynb and check win rate
+# 3. Open backtest_watchlist.ipynb and check win rate
 
 # If win rate >55% → You have an edge! 🎯
 # If win rate <50% → Need optimization ⚙️

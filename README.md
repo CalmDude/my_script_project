@@ -34,7 +34,7 @@ portfolio_analyser/
 ├── notebooks/                    # Jupyter notebooks
 │   ├── portfolio_analysis.ipynb # Main portfolio analysis
 │   ├── full_scanner.ipynb       # Market scanner
-│   └── backtest_best_trades.ipynb # Backtesting notebook
+│   └── backtest_watchlist.ipynb # Backtesting notebook
 ├── scripts/                      # Automation utilities
 │   ├── backup_and_push.ps1      # Git backup automation
 │   ├── install_precommit.ps1    # Pre-commit hook setup
@@ -45,7 +45,7 @@ portfolio_analyser/
 │   ├── technical_analysis.py    # Core analysis engine
 │   ├── portfolio_reports.py     # PDF & Excel generation
 │   ├── full_scanner.py          # Market scanner
-│   ├── backtest_best_trades.py  # Backtesting engine
+│   ├── backtest_watchlist.py  # Backtesting engine
 │   ├── generate_historical_reports.py # Historical simulation
 │   └── run_portfolio_analysis.py # Automation runner
 ├── tests/                        # Unit tests

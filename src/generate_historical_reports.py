@@ -6,17 +6,27 @@ Uses only data available as-of each historical date (no look-ahead bias).
 
 RATE LIMITING WARNING:
 - Historical scans bypass cache (need fresh data for each date)
-- Default concurrency=2 with 1-2s delays is safe
+- Default concurrency=1 with 1-2s delays is safe (increase to 2 if no rate limits)
 - NASDAQ 100 (~100 stocks) recommended for testing vs S&P 500 (~500 stocks)
-- Expect ~100 stocks × 26 weeks = 2,600 API calls for 6 months
+- 5 years = ~260 reports = ~26,000 API calls (100 tickers × 260 reports × 1 call each)
 - If rate limited, wait 1 hour and resume with later --start date
 
-Usage:
-    # Test with NASDAQ 100 (recommended)
-    python generate_historical_reports.py --start 2025-07-01 --end 2026-01-01 --interval 7 --category nasdaq100
+RECOMMENDED: 5-YEAR BACKTEST FOR STATISTICAL CONFIDENCE
+- Generates ~100 trades for Strategy 1 (1.7 trades/month × 60 months)
+- Generates ~200 trades for Strategy 2 (3.3 trades/month × 60 months)
+- Covers full market cycles: 2021-2026 (COVID recovery, bull, bear, recovery)
 
-    # Conservative: 3 months only
-    python generate_historical_reports.py --start 2025-10-01 --category nasdaq100
+Usage:
+    # 5-YEAR BACKTEST (RECOMMENDED for validation)
+    python src/generate_historical_reports.py --start 2021-01-04 --end 2026-01-01 --interval 7 --category nasdaq100 --concurrency 1
+
+    # 3-YEAR BACKTEST (Decent alternative)
+    python src/generate_historical_reports.py --start 2023-01-02 --end 2026-01-01 --interval 7 --category nasdaq100 --concurrency 1
+
+    # Test with 3 months only (Quick test)
+    python src/generate_historical_reports.py --start 2025-10-01 --category nasdaq100 --concurrency 1
+
+Note: End date defaults to today if not specified
 """
 
 import argparse
@@ -133,7 +143,12 @@ def generate_historical_report(
 
     create_best_trades_excel(buy_signals, sell_signals, xlsx_file, category=category)
     create_best_trades_pdf(
-        buy_signals, sell_signals, pdf_file, category=category, regime=regime
+        buy_signals,
+        sell_signals,
+        pdf_file,
+        category=category,
+        regime=regime,
+        as_of_date=as_of_date,
     )
 
     print(f"\n[OK] Reports saved:")
@@ -329,7 +344,7 @@ def main():
     print(f"\nNext steps:")
     print(f"1. Run backtest on historical_simulation folder:")
     print(
-        f"   python src/backtest_best_trades.py --results-dir scanner_results/historical_simulation"
+        f"   python src/backtest_watchlist.py --results-dir scanner_results/historical_simulation"
     )
     print(f"2. Or use the backtest notebook and point to historical_simulation folder")
 

@@ -38,7 +38,7 @@ A complete historical backtesting system that allows you to:
 
 ## Files Created
 
-### 1. `src/backtest_best_trades.py` (Previously created)
+### 1. `src/backtest_watchlist.py` (Previously created)
 Complete backtesting engine with:
 - Excel report parsing
 - Trade simulation with configurable holding period
@@ -46,7 +46,7 @@ Complete backtesting engine with:
 - Edge analysis by quality, entry flag, Vol R:R, and rank
 - CSV export of detailed results
 
-### 2. `notebooks/backtest_best_trades.ipynb` (Previously created)
+### 2. `notebooks/backtest_watchlist.ipynb` (Previously created)
 Interactive Jupyter notebook with:
 - Setup and configuration
 - Backtest execution
@@ -86,7 +86,7 @@ Simple test script to verify historical scanning functionality:
    ↓
 4. Historical reports saved to scanner_results/historical_simulation/
    ↓
-5. User runs backtest_best_trades.py on historical_simulation folder
+5. User runs backtest_watchlist.py on historical_simulation folder
    ↓
 6. Backtest calculates performance metrics
    ↓
@@ -133,7 +133,7 @@ python src/generate_historical_reports.py --start 2025-07-01 --end 2026-01-01 --
 
 ```powershell
 # 30-day holding period (default)
-python src/backtest_best_trades.py --results-dir scanner_results/historical_simulation --period 30
+python src/backtest_watchlist.py --results-dir scanner_results/historical_simulation --period 30
 
 # Output shows:
 # - Overall win rate (e.g., 58.3%)
@@ -144,7 +144,7 @@ python src/backtest_best_trades.py --results-dir scanner_results/historical_simu
 
 ### Step 3: Analyze Results
 
-Open `notebooks/backtest_best_trades.ipynb` and review:
+Open `notebooks/backtest_watchlist.ipynb` and review:
 - **Win rate by Quality**: Is EXCELLENT really better than GOOD?
 - **Win rate by Entry Flag**: Is SAFE ENTRY better than IDEAL?
 - **Win rate by Vol R:R**: Do higher Vol R:R trades win more?

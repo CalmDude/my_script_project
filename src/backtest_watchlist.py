@@ -8,7 +8,7 @@ Analyzes historical watchlist recommendations to:
 4. Optimize entry/exit strategies
 
 Usage:
-    python backtest_best_trades.py --period 30 --category sp500
+    python backtest_watchlist.py --period 30 --category sp500
 """
 
 import pandas as pd
@@ -180,8 +180,12 @@ class WatchlistBacktest:
 
         # Check each period
         for days in [7, 14, 30, 60, 90]:
-            if len(price_history) >= days:
-                period_data = price_history.iloc[:days]
+            # Use available data up to the requested period
+            # If we have fewer days than requested, use what we have
+            actual_days = min(days, len(price_history))
+
+            if actual_days > 0:
+                period_data = price_history.iloc[:actual_days]
 
                 # Check if stop was hit and when
                 stop_hit_mask = period_data["Low"] <= stop_price
@@ -234,6 +238,7 @@ class WatchlistBacktest:
                 results[f"stop_hit_{days}d"] = stop_hit
                 results[f"r1_hit_{days}d"] = r1_hit
                 results[f"exit_reason_{days}d"] = exit_reason
+                results[f"actual_days_{days}d"] = actual_days
 
         return results
 
