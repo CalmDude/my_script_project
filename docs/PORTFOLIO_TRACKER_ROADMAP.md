@@ -189,7 +189,7 @@ data/
 - Win rate (%)
 - Average win vs average loss
 - Best/worst trades
-- Compare to backtest (expected +514% annual)
+- Compare to backtest (expected 46.80% CAGR with S&P 500 optimized universe)
 
 ### Deliverables
 
@@ -491,8 +491,8 @@ Only build if:
 - [ ] < 30 minutes per week time commitment
 
 ### Ultimate Success (Month 6)
-- [ ] Beating backtest performance (+514% annual)
-- [ ] 5-7 concurrent positions managed smoothly
+- [ ] Meeting/beating backtest performance (46.80% CAGR target)
+- [ ] 5-10 concurrent positions managed smoothly
 - [ ] Complete audit trail of all trades
 - [ ] Confident in strategy execution
 - [ ] System runs reliably every Friday

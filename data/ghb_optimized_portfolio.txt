@@ -1,34 +1,43 @@
-# GHB Strategy Optimized Portfolio (25 stocks)
+# GHB Strategy Optimized Portfolio - S&P 500 Optimized Universe (25 stocks)
 # Created: 2026-01-15
+# Updated: 2026-01-15 (Backtesting validated)
 #
-# Expected Performance:
-# - Annual Return: +513.94%
-# - Trades Per Year: ~14
-# - Win Rate: 56.9%
+# Expected Performance (Based on 2021-2025 Backtest):
+# - CAGR: 46.80%
+# - Total Return (5yr): 586.78%
+# - Final Value: $755,460 (from $110k)
+# - Max Drawdown: -25.24%
+# - Win Rate: 62.86%
+# - Trades: ~7 per year
 #
-# Stocks (sorted alphabetically):
-ALAB
-AMAT
-AMD
-ARM
-ASML
+# Configuration:
+# - Position Size: 10% ($11,000 per position)
+# - Max Holdings: 10 positions
+# - Starting Capital: $110,000
+#
+# Stocks (Top 25 S&P 500 by CAGR - sorted alphabetically):
+ANET
+APH
+AXON
 AVGO
-BKNG
+CAH
 CEG
-COST
-DASH
-FANG
-FTNT
+DECK
+DVN
+GE
 GOOG
 GOOGL
-META
-MRNA
-MRVL
-MSFT
+JPM
+LLY
+MCK
+MPC
 MU
 NFLX
 NVDA
-PANW
-PLTR
-TSLA
-TSM
+ORCL
+PWR
+SMCI
+STX
+TRGP
+VST
+WMB
