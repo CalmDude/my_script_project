@@ -1,0 +1,128 @@
+# NASDAQ 100 - Weekly Larsson Strategy Backtest Universe
+# Updated: January 2026
+
+# Mega Cap Tech
+AAPL
+MSFT
+AMZN
+NVDA
+GOOGL
+META
+GOOG
+TSLA
+AVGO
+
+# Large Cap Tech
+NFLX
+ASML
+AMD
+ADBE
+CSCO
+ORCL
+CRM
+INTC
+QCOM
+TXN
+INTU
+AMAT
+MU
+LRCX
+KLAC
+SNPS
+CDNS
+MCHP
+ADI
+NXPI
+
+# Software & Cybersecurity
+PANW
+CRWD
+FTNT
+WDAY
+TEAM
+DDOG
+ZS
+SNOW
+
+# Communication Services
+TMUS
+CMCSA
+META
+GOOG
+GOOGL
+
+# Consumer Discretionary
+COST
+SBUX
+BKNG
+ABNB
+MAR
+MELI
+ORLY
+ROST
+LULU
+CPRT
+ODFL
+VRSK
+
+# Healthcare & Biotech
+AMGN
+GILD
+REGN
+VRTX
+ISRG
+BIIB
+MRNA
+ILMN
+ALGN
+DXCM
+
+# Industrials
+HON
+ADP
+CTAS
+PAYX
+FAST
+
+# Consumer Staples
+PEP
+MDLZ
+KDP
+KHC
+
+# Energy
+CEG
+ENPH
+
+# Financials
+PYPL
+AXP
+
+# Semiconductors (additional)
+ON
+MPWR
+
+# Other Growth
+DASH
+TTD
+RIVN
+LCID
+
+# Additional NASDAQ 100 Members
+PCAR
+CHTR
+ANSS
+MNST
+IDXX
+EXC
+XEL
+MRVL
+WBD
+SGEN
+DLTR
+GEHC
+ZM
+FANG
+GFS
+MDB
+BKR

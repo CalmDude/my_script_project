@@ -1,0 +1,34 @@
+# GHB Strategy Optimized Portfolio (25 stocks)
+# Created: 2026-01-15
+#
+# Expected Performance:
+# - Annual Return: +513.94%
+# - Trades Per Year: ~14
+# - Win Rate: 56.9%
+#
+# Stocks (sorted alphabetically):
+ALAB
+AMAT
+AMD
+ARM
+ASML
+AVGO
+BKNG
+CEG
+COST
+DASH
+FANG
+FTNT
+GOOG
+GOOGL
+META
+MRNA
+MRVL
+MSFT
+MU
+NFLX
+NVDA
+PANW
+PLTR
+TSLA
+TSM
