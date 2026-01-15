@@ -1,0 +1,43 @@
+{
+  "Backtest_Period": {
+    "Start_Date": "2021-01-01",
+    "End_Date": "2025-12-31",
+    "Total_Weeks": 261,
+    "Years": 5.019230769230769
+  },
+  "Portfolio_Settings": {
+    "starting_cash": 110000,
+    "position_size_pct": 7,
+    "max_positions": 7,
+    "comment": "Matches your current portfolio setup"
+  },
+  "Performance": {
+    "Starting_Value": 110000,
+    "Final_Value": 155304.29064222338,
+    "Total_Return_%": 41.18571876565762,
+    "CAGR_%": 7.11329313108966,
+    "Max_Drawdown_%": -19.9009298681377
+  },
+  "Trading_Stats": {
+    "Total_Trades": 34,
+    "Win_Rate_%": 35.294117647058826,
+    "Avg_Win_%": 65.65168423022097,
+    "Avg_Loss_%": -11.773673868859134,
+    "Avg_Trade_%": 15.552923107286782,
+    "Best_Trade_%": 350.8844411585241,
+    "Best_Trade_Ticker": "LLY",
+    "Worst_Trade_%": -24.86210639581072,
+    "Worst_Trade_Ticker": "AVGO"
+  },
+  "Strategy": {
+    "Name": "GHB Strategy (Gold-Gray-Blue)",
+    "Entry_States": [
+      "P1"
+    ],
+    "Exit_States": [
+      "N2"
+    ],
+    "Buy_Slippage": 1.015,
+    "Sell_Slippage": 0.99
+  }
+}

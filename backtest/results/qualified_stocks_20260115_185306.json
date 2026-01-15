@@ -1,0 +1,50 @@
+{
+  "screening_date": "20260115_185306",
+  "total_stocks_tested": 25,
+  "qualified_stocks": 18,
+  "qualification_criteria": {
+    "std_dev_pct": 30,
+    "max_win_pct": 150,
+    "avg_win_pct": 40
+  },
+  "top_30_tickers": [
+    "NVDA",
+    "AVGO",
+    "GOOGL",
+    "GOOG",
+    "NFLX",
+    "MU",
+    "CEG",
+    "META",
+    "AMAT",
+    "DASH",
+    "AMD",
+    "TSM",
+    "MSFT",
+    "PANW",
+    "FANG",
+    "COST",
+    "MRNA",
+    "FTNT"
+  ],
+  "recommended_universe": [
+    "NVDA",
+    "AVGO",
+    "GOOGL",
+    "GOOG",
+    "NFLX",
+    "MU",
+    "CEG",
+    "META",
+    "AMAT",
+    "DASH",
+    "AMD",
+    "TSM",
+    "MSFT",
+    "PANW",
+    "FANG",
+    "COST",
+    "MRNA",
+    "FTNT"
+  ]
+}
