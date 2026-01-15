@@ -1,7 +1,17 @@
-# Strategy D: Gold-Gray-Blue Trading Strategy
+# GHB Strategy: Gold-Gray-Blue Trading Strategy
 
 ## Overview
-Strategy D (Gold-Gray-Blue) is a weekly chart-based momentum strategy that delivered **+601% annual returns** on volatile stocks during 2021-2025 backtesting.
+GHB Strategy (Gold-Gray-Blue) is a weekly chart-based momentum strategy that delivered **+601% annual returns** on volatile stocks during 2021-2025 backtesting.
+
+## State Abbreviations Explained
+
+**P = Positive (Price Above 200-day SMA)**
+- **P1 (Gold):** Strong bullish - BUY signal
+- **P2 (Gray):** Consolidation - HOLD signal
+
+**N = Negative (Price Below 200-day SMA)**
+- **N1 (Gray):** Shallow pullback - HOLD signal
+- **N2 (Blue):** Downtrend confirmed - SELL signal
 
 ## Core Philosophy
 **"Let Winners Run, Exit on Confirmed Weakness"**
@@ -110,28 +120,38 @@ ALAB, AMAT, AMD, AMZN, ARM, ASML, AVGO, BKNG, CEG, COST, CPRT, CRWD, CTAS, DASH,
 
 ## Weekly States Explained
 
+### State System Overview
+**P** = Positive (price above 200-day SMA)  
+**N** = Negative (price below 200-day SMA)  
+**1** = Strong momentum (BUY or SELL zone)  
+**2** = Weak momentum (HOLD zone)
+
 ### P1 (Gold) - Strong Bullish Trend
+- **Abbreviation:** P = Positive, 1 = Strong
 - **Visual:** Gold/Yellow line on chart
-- **Meaning:** Price > D200 with strong momentum
-- **Action:** BUY or HOLD
+- **Meaning:** Price > D200 with strong momentum (ROC > 5% OR distance > 10%)
+- **Action:** 🟡 BUY or HOLD
 - **Psychology:** "The trend is your friend"
 
 ### P2 (Gray) - Consolidation
+- **Abbreviation:** P = Positive, 2 = Weak
 - **Visual:** Gray line on chart (above D200)
 - **Meaning:** Price > D200 but weak momentum
-- **Action:** HOLD (don't sell!)
+- **Action:** ⚪ HOLD (don't sell!)
 - **Psychology:** Healthy pause, not a reversal
 
 ### N1 (Gray) - Shallow Pullback
+- **Abbreviation:** N = Negative, 1 = Strong
 - **Visual:** Gray line on chart (near D200)
-- **Meaning:** Price slightly below D200 (< 5%)
-- **Action:** HOLD (could bounce back)
+- **Meaning:** Price slightly below D200 (within 5%)
+- **Action:** ⚪ HOLD (could bounce back)
 - **Psychology:** Test of support, not failure
 
 ### N2 (Blue) - Downtrend Confirmed
+- **Abbreviation:** N = Negative, 2 = Weak
 - **Visual:** Blue line on chart
-- **Meaning:** Price well below D200, weak momentum
-- **Action:** SELL
+- **Meaning:** Price > 5% below D200, weak momentum
+- **Action:** 🔵 SELL
 - **Psychology:** Trend is broken, exit now
 
 ## Risk Management

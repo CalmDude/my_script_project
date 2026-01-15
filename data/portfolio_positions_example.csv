@@ -1,0 +1,8 @@
+# Example Portfolio Positions (for reference - delete these lines when adding real positions)
+# Format: Ticker,Entry_Date,Entry_Price,Shares,Entry_State,Current_State,Entry_Signal
+# Example: TSLA,2026-01-20,450.00,17,P1,P1,🟡 BUY
+# Example: MU,2026-01-20,95.50,80,P1,P1,🟡 BUY
+# Example: TSM,2026-01-20,198.00,38,P1,P1,🟡 BUY
+#
+# After Monday trades, add your positions below:
+Ticker,Entry_Date,Entry_Price,Shares,Entry_State,Current_State,Entry_Signal
