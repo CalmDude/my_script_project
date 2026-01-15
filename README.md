@@ -1,60 +1,55 @@
-# Portfolio Analyzer
+# GHB Strategy Portfolio Analyzer
 
-**Stock Portfolio Analysis System using Larsson Decision Table Signals**
+**Gold-Gray-Blue Weekly Trading System**
 
-A comprehensive technical analysis tool for portfolio management using the Larsson decision table methodology. Generates actionable buy/sell signals with detailed entry zones, risk management parameters, and professional PDF/Excel reports.
+A systematic weekly trading system that uses the GHB Strategy (Gold-Gray-Blue) to generate buy/sell/hold signals based on 200-day SMA and 4-week momentum. Run every Friday after market close to get Monday trade signals for a 25-stock S&P 500 optimized universe.
+
+**Expected Performance:** 46.80% CAGR | 62.86% Win Rate (2021-2025 backtest)
 
 ## Features
 
-- **Multi-timeframe Technical Analysis**: Daily & weekly SMAs, volume profile (VPVR), pivot points
-- **Larsson Signal System**: 9-state decision table combining macro (weekly) and short-term (daily) trends
-- **Portfolio Analysis**: Complete workflow from data load to report generation with position management
-- **Market Scanner**: Scan S&P 500, NASDAQ 100, or custom watchlists for FULL HOLD + ADD signals
-- **Historical Backtesting**: Generate synthetic historical reports and measure your trading edge
-- **Professional Reports**: PDF trading playbooks and Excel trackers with detailed entry/exit zones
-- **24-Hour Caching**: Intelligent rate limiting to prevent Yahoo Finance API throttling
+- **GHB Signal System**: 4-state decision table (P1/P2/N1/N2) based on 200-day SMA and 4-week momentum
+- **Weekly Trading Rhythm**: Run Friday after 4pm ET, trade Monday morning - simple and disciplined
+- **S&P 500 Optimized Universe**: 25 carefully selected stocks backtested for 46.80% CAGR
+- **Portfolio Tracking**: Automatic position management, P&L calculation, and state change alerts
+- **Universe Health Monitoring**: Automatic alerts when it's time to re-optimize your stock list
+- **Professional Reports**: PDF and CSV outputs with buy/sell signals and execution prices
+- **Backtesting Engine**: Test the strategy on historical data with configurable parameters
 
 ## Project Structure
 
 ```
 portfolio_analyser/
-├── config/                       # Configuration templates
-│   ├── email_config.json.example
-│   └── protection.json
-├── data/                         # User input files
-│   ├── holdings.csv             # Current positions
-│   ├── stocks.txt               # Portfolio watchlist
-│   └── targets.csv              # Target allocations
+├── backtest/                     # Backtesting engine
+│   ├── config.json              # Backtest configuration
+│   ├── run_backtest.py          # Main backtest runner
+│   ├── screen_stocks.py         # S&P 500 screening
+│   ├── data/                    # Stock universe files
+│   └── results/                 # Backtest outputs
+├── data/                         # Portfolio data
+│   ├── ghb_optimized_portfolio.txt  # 25 S&P 500 stocks
+│   ├── portfolio_positions.csv      # Current positions
+│   └── portfolio_settings.json      # Configuration
 ├── docs/                         # Documentation
-│   ├── BEST_TRADES_GUIDE.md     # Best trades report guide
-│   ├── FULL_SCANNER_USER_MANUAL.md # Scanner documentation
-│   ├── HISTORICAL_BACKTESTING.md # Backtesting guide
-│   ├── INTERACTIVE.md           # Notebook usage guide
-│   └── SECURITY.md              # Security best practices
+│   ├── BACKTEST_ANALYSIS_REPORT.md  # Performance analysis
+│   ├── EXECUTION_GUIDE.md           # Monday execution guide
+│   ├── GHB_STRATEGY_GUIDE.md        # Strategy rules
+│   ├── PHASE1_QUICKSTART.md         # Getting started
+│   └── RE-OPTIMIZATION_GUIDE.md     # Annual universe refresh
 ├── notebooks/                    # Jupyter notebooks
-│   ├── portfolio_analysis.ipynb # Main portfolio analysis
-│   ├── full_scanner.ipynb       # Market scanner
-│   └── backtest_watchlist.ipynb # Backtesting notebook
-├── scripts/                      # Automation utilities
+│   ├── ghb_portfolio_scanner.ipynb       # ⭐ Main weekly scanner
+│   └── universe_reoptimization.ipynb     # Annual universe refresh
+├── scripts/                      # Utilities
 │   ├── backup_and_push.ps1      # Git backup automation
-│   ├── install_precommit.ps1    # Pre-commit hook setup
-│   ├── safe_commit.ps1          # Interactive commit
-│   ├── setup_automation.ps1     # Task scheduler setup
-│   └── setup_repo.ps1           # Git initialization
-├── src/                          # Python source modules
-│   ├── technical_analysis.py    # Core analysis engine
-│   ├── portfolio_reports.py     # PDF & Excel generation
-│   ├── full_scanner.py          # Market scanner
-│   ├── backtest_watchlist.py  # Backtesting engine
-│   ├── generate_historical_reports.py # Historical simulation
-│   └── run_portfolio_analysis.py # Automation runner
-├── tests/                        # Unit tests
-│   └── test_analyze_ticker.py
-├── portfolio_results/archive/    # Portfolio outputs
-├── scanner_results/archive/      # Scanner outputs
-├── .env.example                  # Environment variables template
+│   ├── backup_full.ps1          # Full backup (local + remote)
+│   └── add_position.py          # Add positions to portfolio
+├── ghb_scanner_results/          # Scanner outputs
+│   ├── ghb_strategy_signals_[date].csv
+│   ├── ghb_strategy_signals_[date].pdf
+│   └── archive/                 # Old scans
+├── archive/                      # Archived old code
 ├── .gitignore                    # Git ignore rules
-├── README.md                     # Project documentation
+├── README.md                     # This file
 └── requirements.txt              # Python dependencies
 ```
 
@@ -79,29 +74,32 @@ Edit files in `data/` folder:
 - **stocks.txt**: Watchlist (one ticker per line)
 - **targets.csv**: Target allocations (ticker, target_pct, target_value)
 
-### 3. Run Analysis
+### 3. Your Portfolio Files
 
-Open `notebooks/portfolio_analysis.ipynb` in VS Code or Jupyter and run all cells.
+The system uses these files in `data/` folder:
+- **ghb_optimized_portfolio.txt**: Your 25 S&P 500 optimized stocks (pre-configured)
+- *GHB Strategy
 
-## Core Components
+### 4-State Signal System
 
-### Larsson Decision Table
+Simple, clear signals based on price vs 200-day SMA and 4-week momentum:
 
-9-state signal system combining weekly × daily trends:
+- **P1 (Gold) = BUY**: Price > D200 + Strong momentum (ROC > 5% OR distance > 10%)
+- **P2 (Gray) = HOLD**: Price > D200 + Weak momentum (consolidation)
+- **N1 (Gray) = HOLD**: Price < D200 but shallow (distance > -5%, shallow pullback)
+- **N2 (Blue) = SELL**: Price < D200 + Deep (distance < -5%, trend broken)
 
-- **FULL HOLD + ADD**: Strongest bullish - primary accumulation
-- **HOLD**: Neutral - maintain positions
-- **HOLD + REDUCE**: Early warning - lighten by 20%
-- **SCALE IN**: Building position gradually
-- **LIGHT / CASH**: Caution - reduce to 40%
-- **CASH**: Strong warning - keep 20%
-- **REDUCE**: Defensive - trim 40%
-- **FULL CASH / DEFEND**: Maximum defensive - phased exit
+### Position Sizing
 
-### Entry Strategy
+- **10% per position**: $11,000 per trade (based on $110k portfolio)
+- **Max 10 positions**: Fully deployed = $110k invested
+- **Weekly discipline**: Only trade on Mondays based on Friday signals
 
-Three-tranche approach based on confluence:
-- **Primary Zone (40-50%)**: Value Area Low or D100/D200
+### Technical Indicators
+
+- **200-Day SMA (D200)**: Primary trend indicator
+- **4-Week ROC**: Momentum measurement (20 trading days)
+- **Distance %**: How far price is from D200 (determines state
 - **Secondary Zone (25-30%)**: Deeper support levels
 - **Final Zone (20-25%)**: Capitulation buys only
 
@@ -114,22 +112,30 @@ Three-tranche approach based on confluence:
   - **HVN (High Volume Nodes)**: Volume clusters - support/resistance
   - **LVN (Low Volume Nodes)**: Low volume zones - breakout/breakdown areas
   - **Timeframes**: 60-day and 52-week analysis
-- **Pivot Points**: S1/S2/S3, R1/R2/R3 (daily & weekly)
-- **Confluence Ratings**: EXTENDED (>10% above D100), BALANCED (±10%), WEAK (<10% below)
+- *Weekly Workflow
 
-## Daily Workflow
+### Friday (After 4pm ET)
+1. Open `notebooks/ghb_portfolio_scanner.ipynb`
+2. Run all cells (~1-2 minutes for 25 stocks)
+3. Review signals:
+   - **P1 (BUY)**: Enter new positions
+   - **P2/N1 (HOLD)**: Keep existing positions
+   - **N2 (SELL)**: Exit positions Monday
+4. Check PDF in `ghb_scanner_results/`
+5. Plan Monday trades
 
-1. Open `notebooks/portfolio_analysis.ipynb`
-2. Run all cells (~30 seconds for 15 stocks)
-3. Review console output for buy/sell signals
-4. Check generated PDFs in `portfolio_results/`
-5. Place limit orders at specified zones
+### Monday (9:30-10:30am ET)
+1. **9:30-10:00am**: Execute ALL N2 sells (urgent)
+   - Limit: Friday close - 1%
+2. **10:00-10:30am**: Enter P1 buys (patient)
+   - Limit: Friday close + 1.5%
+3. **Monday evening**: Update `portfolio_positions.csv` with fills
 
-## Market Scanner
-
-Use `full_scanner.ipynb` to scan:
-- **Portfolio stocks**: All signals with detailed breakdown
-- **S&P 500**: ~500 stocks, 5-10 minutes
+### Annual (Every January)
+1. Open `notebooks/universe_reoptimization.ipynb`
+2. Run to screen S&P 500 (~10-15 minutes)
+3. Update universe with new top 25 stocks
+4. Transition portfolio over 2-8 weeks
 - **NASDAQ 100**: ~100 stocks, 2-5 minutes
 
 Outputs filtered Excel and PDF reports with only FULL HOLD + ADD signals.
@@ -137,12 +143,36 @@ Outputs filtered Excel and PDF reports with only FULL HOLD + ADD signals.
 ## Technical Notes
 
 - **API Rate Limiting**: 2 concurrent threads with 1-2s delays
-- **Cache TTL**: 24 hours to minimize API calls
-- **Data Source**: Yahoo Finance (yfinance library)
-- **Report Formats**: PDF (ReportLab), Excel (openpyxl)
+- *Performance
 
-## Documentation
+### Backtest Results (2021-2025)
+- **CAGR**: 46.80%
+- **Total Return**: 586.78% (5 years)
+- **Win Rate**: 62.86%
+- **Trades Per Year**: ~7
+- **Avg Win**: +74%
+- **Avg Loss**: -12%
+### Getting Started
+- [docs/PHASE1_QUICKSTART.md](docs/PHASE1_QUICKSTART.md) - **Start here** - Setup guide
+- [docs/GHB_STRATEGY_GUIDE.md](docs/GHB_STRATEGY_GUIDE.md) - Strategy rules explained
+- [docs/EXECUTION_GUIDE.md](docs/EXECUTION_GUIDE.md) - Monday execution details
 
+### Advanced
+- [docs/BACKTEST_ANALYSIS_REPORT.md](docs/BACKTEST_ANALYSIS_REPORT.md) - Complete backtest results
+- [docs/RE-OPTIMIZATION_GUIDE.md](docs/RE-OPTIMIZATION_GUIDE.md) - Annual universe refresh
+- [docs/PORTFOLIO_TRACKER_ROADMAP.md](docs/PORTFOLIO_TRACKER_ROADMAP.md) - Automation roadmap
+
+### Backtesting
+- [backtest/README.md](backtest/README.md) - How to run backtests
+- Run custom backtests with different parameters
+- Screen S&P 500 for new candidates
+
+## Backup & Git
+
+Use provided PowerShell scripts:
+- `scripts/backup_and_push.ps1` - Quick commit & push to GitHub
+- `scripts/backup_full.ps1` - Full local + remote backup
+- `scripts/BACKUP_SCRIPTS_README.md` - Detailed usage guide
 - [docs/HISTORICAL_BACKTESTING.md](docs/HISTORICAL_BACKTESTING.md) - **Start here to backtest your trading edge**
 - [docs/BEST_TRADES_GUIDE.md](docs/BEST_TRADES_GUIDE.md) - Understanding best trades reports
 - [docs/FULL_SCANNER_USER_MANUAL.md](docs/FULL_SCANNER_USER_MANUAL.md) - Scanner details and usage
