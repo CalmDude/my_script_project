@@ -90,14 +90,14 @@ Set the default allocation for stocks without custom sizing:
 | **Diversified** | 5% | 15 | More positions, smaller sizes |
 
 **Current Setup (Default):**
-- `position_size_pct: 7.5` = Each non-custom stock gets 7.5%
+- `position_size_pct: 5.0` = Each non-custom stock gets 5.0%
 - `max_positions: 10` = Maximum 10 holdings allowed
 
 **Math Check:**
 - Custom allocations (TSLA 50% + NVDA 20%) = 70%
 - Remaining capacity = 30%
-- At 7.5% each = 4 additional positions (30% ÷ 7.5%)
-- Total positions = 2 custom + 4 default = 6 stocks ✅
+- At 5.0% each = 6 additional positions (40% ÷ 5.0%)
+- Total positions = 2 custom + 8 default = 610 stocks ✅
 
 #### Step 4: Set Custom Position Allocations (Optional but Recommended)
 

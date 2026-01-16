@@ -1,43 +1,43 @@
 {
     "starting_cash": 110000,
-    "position_size_pct": 7.5,
+    "position_size_pct": 5.0,
     "max_positions": 10,
     "strategy_week": 1,
     "conservative_mode": true,
     "position_allocations": {
         "TSLA": 50,
-        "NVDA": 20
+        "NVDA": 10
     },
     "price_targets": {
         "TSLA": {
-            "target_low": 400.0,
+            "target_low": 380.0,
             "target_high": 411.0,
-            "notes": "Q1 pullback expected, ideal entry zone $400-411"
+            "notes": "Q1 pullback expected, ideal entry zone $380-411"
         },
         "NVDA": {
-            "target_low": 130.0,
-            "target_high": 145.0,
-            "notes": "Scale in on dips to $130s"
+            "target_low": 160.0,
+            "target_high": 172.0,
+            "notes": "Scale in on dips to $160's"
         },
         "ALAB": {
-            "target_low": null,
-            "target_high": null
+            "target_low": 135,
+            "target_high": 140
         },
         "AMD": {
-            "target_low": null,
-            "target_high": null
+            "target_low": 173,
+            "target_high": 180
         },
         "ARM": {
             "target_low": null,
             "target_high": null
         },
         "ASML": {
-            "target_low": null,
-            "target_high": null
+            "target_low": 850,
+            "target_high": 900
         },
         "AVGO": {
-            "target_low": null,
-            "target_high": null
+            "target_low": 310,
+            "target_high": 325
         },
         "GOOG": {
             "target_low": null,
@@ -52,13 +52,13 @@
             "target_high": null
         },
         "PLTR": {
-            "target_low": null,
-            "target_high": null
+            "target_low": 140,
+            "target_high": 155
         },
         "TSM": {
             "target_low": null,
             "target_high": null
         }
     },
-    "notes": "Custom Allocation: TSLA=50%, NVDA=20%, remaining 8 positions split 30% evenly = 3.75% each. Max 10 positions. Price-target based scaling for long-term holds."
+    "notes": "Custom Allocation: TSLA=50%, NVDA=10%, remaining 8 positions split 40% evenly = 5.0% each. Max 10 positions. Price-target based scaling for long-term holds."
 }
