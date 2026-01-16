@@ -1,1 +1,1 @@
-Ticker,Entry_Date,Entry_Price,Shares,Entry_State,Current_State,Entry_Signal
+Ticker,Entry_Date,Entry_Price,Shares,Entry_State,Current_State,Entry_Signal,Fill_Level,Target_Allocation,Can_Add

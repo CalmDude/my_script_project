@@ -5,8 +5,60 @@
     "strategy_week": 1,
     "conservative_mode": true,
     "position_allocations": {
-        "TSLA": 20,
+        "TSLA": 50,
         "NVDA": 20
     },
-    "notes": "Custom Allocation: TSLA=20%, NVDA=20%, remaining 8 positions split 60% evenly = 7.5% each. Max 10 positions. Pure momentum strategy (34.62% CAGR backtested 2021-2025)."
+    "price_targets": {
+        "TSLA": {
+            "target_low": 400.0,
+            "target_high": 411.0,
+            "notes": "Q1 pullback expected, ideal entry zone $400-411"
+        },
+        "NVDA": {
+            "target_low": 130.0,
+            "target_high": 145.0,
+            "notes": "Scale in on dips to $130s"
+        },
+        "ALAB": {
+            "target_low": null,
+            "target_high": null
+        },
+        "AMD": {
+            "target_low": null,
+            "target_high": null
+        },
+        "ARM": {
+            "target_low": null,
+            "target_high": null
+        },
+        "ASML": {
+            "target_low": null,
+            "target_high": null
+        },
+        "AVGO": {
+            "target_low": null,
+            "target_high": null
+        },
+        "GOOG": {
+            "target_low": null,
+            "target_high": null
+        },
+        "MRVL": {
+            "target_low": null,
+            "target_high": null
+        },
+        "MU": {
+            "target_low": null,
+            "target_high": null
+        },
+        "PLTR": {
+            "target_low": null,
+            "target_high": null
+        },
+        "TSM": {
+            "target_low": null,
+            "target_high": null
+        }
+    },
+    "notes": "Custom Allocation: TSLA=50%, NVDA=20%, remaining 8 positions split 30% evenly = 3.75% each. Max 10 positions. Price-target based scaling for long-term holds."
 }

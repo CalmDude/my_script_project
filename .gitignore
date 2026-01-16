@@ -58,6 +58,9 @@ ghb_scanner_results/
 !scanner_results/archive/.gitkeep
 !portfolio_results/archive/.gitkeep
 
+# Generated CSV files
+ghb_strategy_signals_*.csv
+
 # CI/CD
 .github/workflows/*.log
 ci_logs/
