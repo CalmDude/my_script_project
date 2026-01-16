@@ -93,14 +93,12 @@ Write-Host ""
 Write-Host "Copying files..." -ForegroundColor Yellow
 
 $itemsToCopy = @(
-    "src",
     "data",
     "scripts",
     "docs",
-    "config",
-    "tests",
     "notebooks",
-    ".streamlit",
+    "ghb_scanner_results",
+    "archive",
     ".gitignore",
     ".env.example",
     "README.md",
