@@ -1,12 +1,12 @@
 {
     "starting_cash": 110000,
-    "position_size_pct": 10,
+    "position_size_pct": 7.5,
     "max_positions": 10,
     "strategy_week": 1,
     "conservative_mode": true,
     "position_allocations": {
-        "TSLA": 50,
+        "TSLA": 20,
         "NVDA": 20
     },
-    "notes": "Optimized Configuration: Variable position sizing enabled. TSLA=50%, NVDA=20%, others=10% default. Max 10 positions. Expected CAGR: 46.80% (backtested 2021-2025). Week 1 = 3 positions, gradually build to 5-7 over 8 weeks."
+    "notes": "Custom Allocation: TSLA=20%, NVDA=20%, remaining 8 positions split 60% evenly = 7.5% each. Max 10 positions. Pure momentum strategy (34.62% CAGR backtested 2021-2025)."
 }

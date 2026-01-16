@@ -1,0 +1,50 @@
+{
+    "backtest_settings": {
+        "start_date": "2021-01-01",
+        "end_date": "2025-12-31",
+        "universe": "custom_tech_stocks",
+        "comment": "12-stock AI/Tech universe: ALAB, AMD, ARM, ASML, AVGO, GOOG, MRVL, MU, NVDA, PLTR, TSLA, TSM"
+    },
+    "portfolio_settings": {
+        "starting_cash": 110000,
+        "position_size_pct": 10,
+        "max_positions": 10,
+        "position_allocations": {},
+        "comment": "Equal allocation: 10% each position (12 stocks, max 10 positions)"
+    },
+    "execution_settings": {
+        "buy_slippage": 1.015,
+        "sell_slippage": 0.99,
+        "commission_per_trade": 0,
+        "comment": "buy_slippage: Friday close * 1.015 (limit +1.5%), sell_slippage: Friday close * 0.99 (limit -1%)"
+    },
+    "strategy_settings": {
+        "entry_states": [
+            "P1"
+        ],
+        "exit_states": [
+            "N2"
+        ],
+        "hold_states": [
+            "P2",
+            "N1"
+        ],
+        "max_support_distance": 10,
+        "use_risk_adjusted_sizing": false,
+        "comment": "Entry filter: 10% from support (notebook default), no risk adjustment"
+    },
+    "data_settings": {
+        "data_source": "yfinance",
+        "cache_enabled": true,
+        "cache_path": "backtest/data/cache",
+        "redownload": false,
+        "comment": "Set redownload:true to force refresh data"
+    },
+    "output_settings": {
+        "results_path": "backtest/results",
+        "save_trades": true,
+        "save_equity_curve": true,
+        "save_summary": true,
+        "generate_html_report": true
+    }
+}

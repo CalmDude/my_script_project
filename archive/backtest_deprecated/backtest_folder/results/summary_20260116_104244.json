@@ -1,0 +1,47 @@
+{
+  "Backtest_Period": {
+    "Start_Date": "2021-01-01",
+    "End_Date": "2025-12-31",
+    "Total_Weeks": 233,
+    "Years": 4.480769230769231
+  },
+  "Portfolio_Settings": {
+    "starting_cash": 110000,
+    "position_size_pct": 10,
+    "max_positions": 10,
+    "position_allocations": {
+      "TSLA": 50,
+      "NVDA": 20
+    },
+    "comment": "Variable allocation: TSLA 50%, NVDA 20%, others split remaining 30% = 3.75% each"
+  },
+  "Performance": {
+    "Starting_Value": 110000,
+    "Final_Value": 110745.83533996584,
+    "Total_Return_%": 0.6780321272416702,
+    "CAGR_%": 0.15092355631494137,
+    "Max_Drawdown_%": -0.12148912131570713
+  },
+  "Trading_Stats": {
+    "Total_Trades": 3,
+    "Win_Rate_%": 66.66666666666666,
+    "Avg_Win_%": 40.189181220482446,
+    "Avg_Loss_%": -11.784877130533442,
+    "Avg_Trade_%": 22.86449510347715,
+    "Best_Trade_%": 60.32187714118614,
+    "Best_Trade_Ticker": "GOOG",
+    "Worst_Trade_%": -11.784877130533442,
+    "Worst_Trade_Ticker": "GOOG"
+  },
+  "Strategy": {
+    "Name": "GHB Strategy (Gold-Gray-Blue)",
+    "Entry_States": [
+      "P1"
+    ],
+    "Exit_States": [
+      "N2"
+    ],
+    "Buy_Slippage": 1.015,
+    "Sell_Slippage": 0.99
+  }
+}
