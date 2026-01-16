@@ -2,8 +2,8 @@
     "backtest_settings": {
         "start_date": "2021-01-01",
         "end_date": "2025-12-31",
-        "universe": "sp500_optimized",
-        "comment": "nasdaq39 = 39 original GHB stocks (28 qualified, 71.8% rate), sp500_optimized = top 25 S&P 500 stocks (117 qualified, 23.9% rate), nasdaq25 = 25 NASDAQ stocks (curated subset), sp100_optimized = 24 S&P 100 stocks"
+        "universe": "custom_tech_stocks",
+        "comment": "Custom tech stocks: ALAB, AYGO, MRVL, ARM, TSLA, NVDA, PLTR, NU, TSM, ASML, GOOG, AMD"
     },
     "portfolio_settings": {
         "starting_cash": 110000,

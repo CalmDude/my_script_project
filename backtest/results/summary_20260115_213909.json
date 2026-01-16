@@ -1,0 +1,43 @@
+{
+  "Backtest_Period": {
+    "Start_Date": "2021-01-01",
+    "End_Date": "2025-12-31",
+    "Total_Weeks": 261,
+    "Years": 5.019230769230769
+  },
+  "Portfolio_Settings": {
+    "starting_cash": 110000,
+    "position_size_pct": 10,
+    "max_positions": 10,
+    "comment": "Optimal configuration: 10% position size with max 10 holdings (46.80% CAGR backtested)"
+  },
+  "Performance": {
+    "Starting_Value": 110000,
+    "Final_Value": 434860.50948447234,
+    "Total_Return_%": 295.32773589497486,
+    "CAGR_%": 31.502502788073627,
+    "Max_Drawdown_%": -22.16871319428205
+  },
+  "Trading_Stats": {
+    "Total_Trades": 18,
+    "Win_Rate_%": 61.111111111111114,
+    "Avg_Win_%": 133.51562309913095,
+    "Avg_Loss_%": -12.45013297561495,
+    "Avg_Trade_%": 76.75116240339644,
+    "Best_Trade_%": 516.5946697903153,
+    "Best_Trade_Ticker": "NVDA",
+    "Worst_Trade_%": -23.667290523112,
+    "Worst_Trade_Ticker": "CEG"
+  },
+  "Strategy": {
+    "Name": "GHB Strategy (Gold-Gray-Blue)",
+    "Entry_States": [
+      "P1"
+    ],
+    "Exit_States": [
+      "N2"
+    ],
+    "Buy_Slippage": 1.015,
+    "Sell_Slippage": 0.99
+  }
+}

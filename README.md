@@ -10,6 +10,7 @@ A systematic weekly trading system that uses the GHB Strategy (Gold-Gray-Blue) t
 
 - **GHB Signal System**: 4-state decision table (P1/P2/N1/N2) based on 200-day SMA and 4-week momentum
 - **Weekly Trading Rhythm**: Run Friday after 4pm ET, trade Monday morning - simple and disciplined
+- **Variable Position Sizing**: Custom allocations per ticker (e.g., TSLA 50%, NVDA 20%, others 10%)
 - **S&P 500 Optimized Universe**: 25 carefully selected stocks backtested for 46.80% CAGR
 - **Portfolio Tracking**: Automatic position management, P&L calculation, and state change alerts
 - **Universe Health Monitoring**: Automatic alerts when it's time to re-optimize your stock list
@@ -156,6 +157,7 @@ Outputs filtered Excel and PDF reports with only FULL HOLD + ADD signals.
 - [docs/PHASE1_QUICKSTART.md](docs/PHASE1_QUICKSTART.md) - **Start here** - Setup guide
 - [docs/GHB_STRATEGY_GUIDE.md](docs/GHB_STRATEGY_GUIDE.md) - Strategy rules explained
 - [docs/EXECUTION_GUIDE.md](docs/EXECUTION_GUIDE.md) - Monday execution details
+- [docs/VARIABLE_ALLOCATION_GUIDE.md](docs/VARIABLE_ALLOCATION_GUIDE.md) - Variable position sizing setup
 
 ### Advanced
 - [docs/BACKTEST_ANALYSIS_REPORT.md](docs/BACKTEST_ANALYSIS_REPORT.md) - Complete backtest results

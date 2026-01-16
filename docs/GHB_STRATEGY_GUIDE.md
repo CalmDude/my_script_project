@@ -1,7 +1,9 @@
 # GHB Strategy: Gold-Gray-Blue Trading Strategy
 
 ## Overview
-GHB Strategy (Gold-Gray-Blue) is a weekly chart-based momentum strategy that delivered **+601% annual returns** on volatile stocks during 2021-2025 backtesting.
+GHB Strategy (Gold-Gray-Blue) is a weekly chart-based momentum strategy enhanced with **RSI overextension warnings** to avoid buying parabolic stocks. 
+
+**AI/Tech Focused Version:** 56.51% CAGR (2022-2025 backtest) with 11-stock AI/tech universe.
 
 ## State Abbreviations Explained
 
@@ -14,11 +16,12 @@ GHB Strategy (Gold-Gray-Blue) is a weekly chart-based momentum strategy that del
 - **N2 (Blue):** Downtrend confirmed - SELL signal
 
 ## Core Philosophy
-**"Let Winners Run, Exit on Confirmed Weakness"**
+**"Let Winners Run, Exit on Confirmed Weakness, Avoid Overextended Entries"**
 
-- Enter when momentum is strong (Gold/P1 state)
+- Enter when momentum is strong (Gold/P1 state) **AND entry quality is favorable**
 - Hold through temporary pullbacks (Gray/P2 and N1 states)
 - Exit only when trend breaks (Blue/N2 state + below 200-day SMA)
+- **NEW:** Use RSI to prioritize healthy entries and avoid parabolic tops
 
 ## Entry Rules
 
@@ -27,14 +30,23 @@ GHB Strategy (Gold-Gray-Blue) is a weekly chart-based momentum strategy that del
    - Price > 200-day SMA (D200)
    - AND (4-week ROC > 5% OR distance from D200 > 10%)
    
-2. **Confirmation**
-   - Current price is above D200
-   - Strong relative strength vs market
+2. **Entry Quality Assessment (RSI-Based)**
+   - 🔥 **PULLBACK BUY** (Priority #1): P1 + negative ROC = dip buying opportunity
+   - ✅ **HEALTHY BUY** (Priority #2): RSI <70 + Distance <30% = ideal entry zone
+   - ⚠️ **EXTENDED** (Caution): RSI 70-80 or Distance 30-40% = enter small size
+   - 🚨 **OVERHEATED** (Avoid): RSI >80 + Distance >40% = wait for pullback
+
+3. **Smart Entry Tactics**
+   - Always prioritize Pullback Buys (P1 but negative momentum = buy dip)
+   - Enter full position on Healthy Buys
+   - Enter 50% position on Extended stocks, add if pulls back
+   - Skip Overheated stocks until they consolidate
 
 ### When to Enter:
 - P1 state appears on weekly chart
 - Fresh breakout above D200 with momentum
-- Previous week was NOT P1 (new signal)
+- Entry Quality is Pullback Buy or Healthy Buy (ideally)
+- Avoid Extended/Overheated unless strong conviction
 
 ## Hold Rules
 

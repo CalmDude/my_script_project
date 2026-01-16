@@ -4,5 +4,9 @@
     "max_positions": 10,
     "strategy_week": 1,
     "conservative_mode": true,
-    "notes": "Optimized Configuration: 10% position size, 10 max positions. Expected CAGR: 46.80% (backtested 2021-2025). Week 1 = 3 positions, gradually build to 5-7 over 8 weeks."
+    "position_allocations": {
+        "TSLA": 50,
+        "NVDA": 20
+    },
+    "notes": "Optimized Configuration: Variable position sizing enabled. TSLA=50%, NVDA=20%, others=10% default. Max 10 positions. Expected CAGR: 46.80% (backtested 2021-2025). Week 1 = 3 positions, gradually build to 5-7 over 8 weeks."
 }

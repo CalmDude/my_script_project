@@ -277,6 +277,58 @@ class DataLoader:
                 "APH",
                 "JPM",
             ]
+        elif universe == "sp500_unbiased_2020":
+            # UNBIASED: Top 25 stocks selected using 2020 data only
+            # Selected from S&P 500 members as of Jan 1, 2021
+            # Criteria: Volatility >=25%, Volume >=2M, MarketCap >=$5B (all measured in 2020)
+            # This avoids survivorship bias and optimization bias
+            universe_file = Path("backtest/data/sp500_unbiased_2020.txt")
+            if universe_file.exists():
+                with open(universe_file, "r") as f:
+                    tickers = [line.strip() for line in f if line.strip()]
+            else:
+                raise FileNotFoundError(
+                    f"Universe file not found: {universe_file}\n"
+                    "Run: python backtest/screen_unbiased_2020.py"
+                )
+        elif universe == "sp500_enhanced_2020":
+            # ENHANCED: Top 25 stocks with Phase 1 improvements
+            # Selected from S&P 500 members as of Jan 1, 2021 using 2020 data only
+            # Improvements: Multi-factor scoring (Momentum 40% + Quality 30% + Vol 30%)
+            #               Quality filters (exclude trash stocks)
+            #               Sector limits (max 5 per sector for diversification)
+            # Expected: +10-15% CAGR vs unbiased (25-30% vs 15.28%)
+            universe_file = Path("backtest/data/sp500_enhanced_2020.txt")
+            if universe_file.exists():
+                with open(universe_file, "r") as f:
+                    tickers = [line.strip() for line in f if line.strip()]
+            else:
+                raise FileNotFoundError(
+                    f"Universe file not found: {universe_file}\n"
+                    "Run: python backtest/screen_enhanced_2020.py"
+                )
+        elif universe == "sp500_enhanced_v2_2020":
+            # ENHANCED V2: Phase 1B with corrected filters
+            # Gentler filters: Debt<5.0, MarketCap>=$5B, RevGrowth>-20%
+            # Momentum-focused: 50% Momentum + 35% Volatility + 15% Quality
+            # Relaxed sector limits: Max 8 per sector (32%)
+            universe_file = Path("backtest/data/sp500_enhanced_v2_2020.txt")
+            if universe_file.exists():
+                with open(universe_file, "r") as f:
+                    tickers = [line.strip() for line in f if line.strip()]
+            else:
+                raise FileNotFoundError(
+                    f"Universe file not found: {universe_file}\n"
+                    "Run: python backtest/screen_enhanced_v2_2020.py"
+                )
+        elif universe == "custom_tech_stocks":
+            # CUSTOM: User-selected tech stocks (ALAB, AYGO, MRVL, ARM, TSLA, NVDA, PLTR, NU, TSM, ASML, GOOG, AMD)
+            universe_file = Path("backtest/data/custom_tech_stocks.txt")
+            if universe_file.exists():
+                with open(universe_file, "r") as f:
+                    tickers = [line.strip() for line in f if line.strip()]
+            else:
+                raise FileNotFoundError(f"Universe file not found: {universe_file}")
         elif universe == "sp500":
             # S&P 500 - Full list of 500 large cap US stocks
             # This is a comprehensive list as of 2024
