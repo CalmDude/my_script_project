@@ -54,6 +54,7 @@ scanner_cache/
 # Generated Reports & Data
 scanner_results/
 portfolio_results/
+ghb_scanner_results/
 !scanner_results/archive/.gitkeep
 !portfolio_results/archive/.gitkeep
 
