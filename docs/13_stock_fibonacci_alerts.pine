@@ -1,0 +1,431 @@
+//@version=5
+indicator("Stock Fibonacci Alerts", overlay=false, dynamic_requests=true)
+
+// ========== LOOKBACK SETTINGS ==========
+lookbackPeriod = input.int(100, title="Days to Lookback for Auto Swing Calculation", minval=1)
+useAutoSwing = input.bool(true, title="Auto-Calculate Swing High/Low from Lookback")
+
+// ========== STOCK 1: ALAB ==========
+symALAB = input.string("NASDAQ:ALAB", title="ALAB Symbol")
+autoHighALAB = request.security("NASDAQ:ALAB", "D", ta.highest(high, lookbackPeriod))
+autoLowALAB = request.security("NASDAQ:ALAB", "D", ta.lowest(low, lookbackPeriod))
+manualHighALAB = input.float(0.0, title="ALAB Swing High (Override when Auto-Calc OFF)", minval=0.0)
+manualLowALAB = input.float(0.0, title="ALAB Swing Low (Override when Auto-Calc OFF)", minval=0.0)
+dollarALAB = input.float(0.0, title="ALAB $ Amount", minval=0.0)
+swingHighALAB = useAutoSwing ? autoHighALAB : (manualHighALAB > 0.0 ? manualHighALAB : autoHighALAB)
+swingLowALAB = useAutoSwing ? autoLowALAB : (manualLowALAB > 0.0 ? manualLowALAB : autoLowALAB)
+
+// ========== STOCK 2: AMD ==========
+symAMD = input.string("NASDAQ:AMD", title="AMD Symbol")
+autoHighAMD = request.security("NASDAQ:AMD", "D", ta.highest(high, lookbackPeriod))
+autoLowAMD = request.security("NASDAQ:AMD", "D", ta.lowest(low, lookbackPeriod))
+manualHighAMD = input.float(0.0, title="AMD Swing High (Override when Auto-Calc OFF)", minval=0.0)
+manualLowAMD = input.float(0.0, title="AMD Swing Low (Override when Auto-Calc OFF)", minval=0.0)
+dollarAMD = input.float(0.0, title="AMD $ Amount", minval=0.0)
+swingHighAMD = useAutoSwing ? autoHighAMD : (manualHighAMD > 0.0 ? manualHighAMD : autoHighAMD)
+swingLowAMD = useAutoSwing ? autoLowAMD : (manualLowAMD > 0.0 ? manualLowAMD : autoLowAMD)
+
+// ========== STOCK 3: ARM ==========
+symARM = input.string("NASDAQ:ARM", title="ARM Symbol")
+autoHighARM = request.security("NASDAQ:ARM", "D", ta.highest(high, lookbackPeriod))
+autoLowARM = request.security("NASDAQ:ARM", "D", ta.lowest(low, lookbackPeriod))
+manualHighARM = input.float(0.0, title="ARM Swing High (Override when Auto-Calc OFF)", minval=0.0)
+manualLowARM = input.float(0.0, title="ARM Swing Low (Override when Auto-Calc OFF)", minval=0.0)
+dollarARM = input.float(0.0, title="ARM $ Amount", minval=0.0)
+swingHighARM = useAutoSwing ? autoHighARM : (manualHighARM > 0.0 ? manualHighARM : autoHighARM)
+swingLowARM = useAutoSwing ? autoLowARM : (manualLowARM > 0.0 ? manualLowARM : autoLowARM)
+
+// ========== STOCK 4: ASML ==========
+symASML = input.string("NASDAQ:ASML", title="ASML Symbol")
+autoHighASML = request.security("NASDAQ:ASML", "D", ta.highest(high, lookbackPeriod))
+autoLowASML = request.security("NASDAQ:ASML", "D", ta.lowest(low, lookbackPeriod))
+manualHighASML = input.float(0.0, title="ASML Swing High (Override when Auto-Calc OFF)", minval=0.0)
+manualLowASML = input.float(0.0, title="ASML Swing Low (Override when Auto-Calc OFF)", minval=0.0)
+dollarASML = input.float(0.0, title="ASML $ Amount", minval=0.0)
+swingHighASML = useAutoSwing ? autoHighASML : (manualHighASML > 0.0 ? manualHighASML : autoHighASML)
+swingLowASML = useAutoSwing ? autoLowASML : (manualLowASML > 0.0 ? manualLowASML : autoLowASML)
+
+// ========== STOCK 5: AVGO ==========
+symAVGO = input.string("NASDAQ:AVGO", title="AVGO Symbol")
+autoHighAVGO = request.security("NASDAQ:AVGO", "D", ta.highest(high, lookbackPeriod))
+autoLowAVGO = request.security("NASDAQ:AVGO", "D", ta.lowest(low, lookbackPeriod))
+manualHighAVGO = input.float(0.0, title="AVGO Swing High (Override when Auto-Calc OFF)", minval=0.0)
+manualLowAVGO = input.float(0.0, title="AVGO Swing Low (Override when Auto-Calc OFF)", minval=0.0)
+dollarAVGO = input.float(0.0, title="AVGO $ Amount", minval=0.0)
+swingHighAVGO = useAutoSwing ? autoHighAVGO : (manualHighAVGO > 0.0 ? manualHighAVGO : autoHighAVGO)
+swingLowAVGO = useAutoSwing ? autoLowAVGO : (manualLowAVGO > 0.0 ? manualLowAVGO : autoLowAVGO)
+
+// ========== STOCK 6: GOOG ==========
+symGOOG = input.string("NASDAQ:GOOG", title="GOOG Symbol")
+autoHighGOOG = request.security("NASDAQ:GOOG", "D", ta.highest(high, lookbackPeriod))
+autoLowGOOG = request.security("NASDAQ:GOOG", "D", ta.lowest(low, lookbackPeriod))
+manualHighGOOG = input.float(0.0, title="GOOG Swing High (Override when Auto-Calc OFF)", minval=0.0)
+manualLowGOOG = input.float(0.0, title="GOOG Swing Low (Override when Auto-Calc OFF)", minval=0.0)
+dollarGOOG = input.float(0.0, title="GOOG $ Amount", minval=0.0)
+swingHighGOOG = useAutoSwing ? autoHighGOOG : (manualHighGOOG > 0.0 ? manualHighGOOG : autoHighGOOG)
+swingLowGOOG = useAutoSwing ? autoLowGOOG : (manualLowGOOG > 0.0 ? manualLowGOOG : autoLowGOOG)
+
+// ========== STOCK 7: MRVL ==========
+symMRVL = input.string("NASDAQ:MRVL", title="MRVL Symbol")
+autoHighMRVL = request.security("NASDAQ:MRVL", "D", ta.highest(high, lookbackPeriod))
+autoLowMRVL = request.security("NASDAQ:MRVL", "D", ta.lowest(low, lookbackPeriod))
+manualHighMRVL = input.float(0.0, title="MRVL Swing High (Override when Auto-Calc OFF)", minval=0.0)
+manualLowMRVL = input.float(0.0, title="MRVL Swing Low (Override when Auto-Calc OFF)", minval=0.0)
+dollarMRVL = input.float(0.0, title="MRVL $ Amount", minval=0.0)
+swingHighMRVL = useAutoSwing ? autoHighMRVL : (manualHighMRVL > 0.0 ? manualHighMRVL : autoHighMRVL)
+swingLowMRVL = useAutoSwing ? autoLowMRVL : (manualLowMRVL > 0.0 ? manualLowMRVL : autoLowMRVL)
+
+// ========== STOCK 8: MSTR ==========
+symMSTR = input.string("NASDAQ:MSTR", title="MSTR Symbol")
+autoHighMSTR = request.security("NASDAQ:MSTR", "D", ta.highest(high, lookbackPeriod))
+autoLowMSTR = request.security("NASDAQ:MSTR", "D", ta.lowest(low, lookbackPeriod))
+manualHighMSTR = input.float(0.0, title="MSTR Swing High (Override when Auto-Calc OFF)", minval=0.0)
+manualLowMSTR = input.float(0.0, title="MSTR Swing Low (Override when Auto-Calc OFF)", minval=0.0)
+dollarMSTR = input.float(0.0, title="MSTR $ Amount", minval=0.0)
+swingHighMSTR = useAutoSwing ? autoHighMSTR : (manualHighMSTR > 0.0 ? manualHighMSTR : autoHighMSTR)
+swingLowMSTR = useAutoSwing ? autoLowMSTR : (manualLowMSTR > 0.0 ? manualLowMSTR : autoLowMSTR)
+
+// ========== STOCK 9: MU ==========
+symMU = input.string("NASDAQ:MU", title="MU Symbol")
+autoHighMU = request.security("NASDAQ:MU", "D", ta.highest(high, lookbackPeriod))
+autoLowMU = request.security("NASDAQ:MU", "D", ta.lowest(low, lookbackPeriod))
+manualHighMU = input.float(0.0, title="MU Swing High (Override when Auto-Calc OFF)", minval=0.0)
+manualLowMU = input.float(0.0, title="MU Swing Low (Override when Auto-Calc OFF)", minval=0.0)
+dollarMU = input.float(0.0, title="MU $ Amount", minval=0.0)
+swingHighMU = useAutoSwing ? autoHighMU : (manualHighMU > 0.0 ? manualHighMU : autoHighMU)
+swingLowMU = useAutoSwing ? autoLowMU : (manualLowMU > 0.0 ? manualLowMU : autoLowMU)
+
+// ========== STOCK 10: NVDA ==========
+symNVDA = input.string("NASDAQ:NVDA", title="NVDA Symbol")
+autoHighNVDA = request.security("NASDAQ:NVDA", "D", ta.highest(high, lookbackPeriod))
+autoLowNVDA = request.security("NASDAQ:NVDA", "D", ta.lowest(low, lookbackPeriod))
+manualHighNVDA = input.float(0.0, title="NVDA Swing High (Override when Auto-Calc OFF)", minval=0.0)
+manualLowNVDA = input.float(0.0, title="NVDA Swing Low (Override when Auto-Calc OFF)", minval=0.0)
+dollarNVDA = input.float(0.0, title="NVDA $ Amount", minval=0.0)
+swingHighNVDA = useAutoSwing ? autoHighNVDA : (manualHighNVDA > 0.0 ? manualHighNVDA : autoHighNVDA)
+swingLowNVDA = useAutoSwing ? autoLowNVDA : (manualLowNVDA > 0.0 ? manualLowNVDA : autoLowNVDA)
+
+// ========== STOCK 11: PLTR ==========
+symPLTR = input.string("NASDAQ:PLTR", title="PLTR Symbol")
+autoHighPLTR = request.security("NASDAQ:PLTR", "D", ta.highest(high, lookbackPeriod))
+autoLowPLTR = request.security("NASDAQ:PLTR", "D", ta.lowest(low, lookbackPeriod))
+manualHighPLTR = input.float(0.0, title="PLTR Swing High (Override when Auto-Calc OFF)", minval=0.0)
+manualLowPLTR = input.float(0.0, title="PLTR Swing Low (Override when Auto-Calc OFF)", minval=0.0)
+dollarPLTR = input.float(0.0, title="PLTR $ Amount", minval=0.0)
+swingHighPLTR = useAutoSwing ? autoHighPLTR : (manualHighPLTR > 0.0 ? manualHighPLTR : autoHighPLTR)
+swingLowPLTR = useAutoSwing ? autoLowPLTR : (manualLowPLTR > 0.0 ? manualLowPLTR : autoLowPLTR)
+
+// ========== STOCK 12: TSLA ==========
+symTSLA = input.string("NASDAQ:TSLA", title="TSLA Symbol")
+autoHighTSLA = request.security("NASDAQ:TSLA", "D", ta.highest(high, lookbackPeriod))
+autoLowTSLA = request.security("NASDAQ:TSLA", "D", ta.lowest(low, lookbackPeriod))
+manualHighTSLA = input.float(0.0, title="TSLA Swing High (Override when Auto-Calc OFF)", minval=0.0)
+manualLowTSLA = input.float(0.0, title="TSLA Swing Low (Override when Auto-Calc OFF)", minval=0.0)
+dollarTSLA = input.float(0.0, title="TSLA $ Amount", minval=0.0)
+swingHighTSLA = useAutoSwing ? autoHighTSLA : (manualHighTSLA > 0.0 ? manualHighTSLA : autoHighTSLA)
+swingLowTSLA = useAutoSwing ? autoLowTSLA : (manualLowTSLA > 0.0 ? manualLowTSLA : autoLowTSLA)
+
+// ========== STOCK 13: TSM ==========
+symTSM = input.string("NYSE:TSM", title="TSM Symbol")
+autoHighTSM = request.security("NYSE:TSM", "D", ta.highest(high, lookbackPeriod))
+autoLowTSM = request.security("NYSE:TSM", "D", ta.lowest(low, lookbackPeriod))
+manualHighTSM = input.float(0.0, title="TSM Swing High (Override when Auto-Calc OFF)", minval=0.0)
+manualLowTSM = input.float(0.0, title="TSM Swing Low (Override when Auto-Calc OFF)", minval=0.0)
+dollarTSM = input.float(0.0, title="TSM $ Amount", minval=0.0)
+swingHighTSM = useAutoSwing ? autoHighTSM : (manualHighTSM > 0.0 ? manualHighTSM : autoHighTSM)
+swingLowTSM = useAutoSwing ? autoLowTSM : (manualLowTSM > 0.0 ? manualLowTSM : autoLowTSM)
+
+// ========== DISPLAY SETTINGS ==========
+showStatus = input.bool(false, title="Show Status Line")
+
+// ========== FIBONACCI CALCULATION AND ALERT FUNCTION ==========
+fibCheck(sym, swingHigh, swingLow, dollarAmount) =>
+    if swingHigh > 0.0 and swingLow > 0.0
+        // Calculate Fibonacci levels based on swing points
+        priceRange = swingHigh - swingLow
+        fib382 = swingHigh - (priceRange * 0.382)
+        fib50 = swingHigh - (priceRange * 0.5)
+        fib618 = swingHigh - (priceRange * 0.618)
+        
+        // Get current realtime price for intraday alerts
+        currentPrice = request.security(sym, timeframe.period, close)
+        
+        // Check if current price crosses below each Fibonacci level (RETRACEMENT - BUY)
+        hitDown382 = ta.crossunder(currentPrice, fib382) ? 1 : 0
+        hitDown50 = ta.crossunder(currentPrice, fib50) ? 1 : 0
+        hitDown618 = ta.crossunder(currentPrice, fib618) ? 1 : 0
+        
+        // Check if current price crosses above each Fibonacci level (BREAKOUT - SELL/TAKE PROFIT)
+        hitUp382 = ta.crossover(currentPrice, fib382) ? 1 : 0
+        hitUp50 = ta.crossover(currentPrice, fib50) ? 1 : 0
+        hitUp618 = ta.crossover(currentPrice, fib618) ? 1 : 0
+        
+        // Calculate quantities for CROSSING DOWN (buying dip) - 20%, 30%, 50% allocation
+        qtyDown382 = fib382 > 0 ? math.floor((dollarAmount * 0.20) / fib382) : 0
+        qtyDown50 = fib50 > 0 ? math.floor((dollarAmount * 0.30) / fib50) : 0
+        qtyDown618 = fib618 > 0 ? math.floor((dollarAmount * 0.50) / fib618) : 0
+        
+        // Calculate quantities for CROSSING UP (taking profit) - 10%, 15%, 25% allocation
+        qtyUp382 = fib382 > 0 ? math.floor((dollarAmount * 0.10) / fib382) : 0
+        qtyUp50 = fib50 > 0 ? math.floor((dollarAmount * 0.15) / fib50) : 0
+        qtyUp618 = fib618 > 0 ? math.floor((dollarAmount * 0.25) / fib618) : 0
+        
+        // Combine hit signals (prioritize crossing down for return value)
+        hit382 = hitDown382 > 0 ? hitDown382 : (hitUp382 > 0 ? -1 : 0)  // -1 indicates crossing up
+        hit50 = hitDown50 > 0 ? hitDown50 : (hitUp50 > 0 ? -1 : 0)
+        hit618 = hitDown618 > 0 ? hitDown618 : (hitUp618 > 0 ? -1 : 0)
+        
+        // Select appropriate quantity based on direction
+        qty382 = hit382 == 1 ? qtyDown382 : (hit382 == -1 ? qtyUp382 : 0)
+        qty50 = hit50 == 1 ? qtyDown50 : (hit50 == -1 ? qtyUp50 : 0)
+        qty618 = hit618 == 1 ? qtyDown618 : (hit618 == -1 ? qtyUp618 : 0)
+        
+        [hit382, hit50, hit618, fib382, fib50, fib618, currentPrice, qty382, qty50, qty618]
+    else
+        [0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0]
+
+// ========== CHECK ALL STOCKS ==========
+[hitALAB382, hitALAB50, hitALAB618, fibALAB382, fibALAB50, fibALAB618, priceALAB, qtyALAB_382, qtyALAB_50, qtyALAB_618] = fibCheck(symALAB, swingHighALAB, swingLowALAB, dollarALAB)
+[hitAMD382, hitAMD50, hitAMD618, fibAMD382, fibAMD50, fibAMD618, priceAMD, qtyAMD_382, qtyAMD_50, qtyAMD_618] = fibCheck(symAMD, swingHighAMD, swingLowAMD, dollarAMD)
+[hitARM382, hitARM50, hitARM618, fibARM382, fibARM50, fibARM618, priceARM, qtyARM_382, qtyARM_50, qtyARM_618] = fibCheck(symARM, swingHighARM, swingLowARM, dollarARM)
+[hitASML382, hitASML50, hitASML618, fibASML382, fibASML50, fibASML618, priceASML, qtyASML_382, qtyASML_50, qtyASML_618] = fibCheck(symASML, swingHighASML, swingLowASML, dollarASML)
+[hitAVGO382, hitAVGO50, hitAVGO618, fibAVGO382, fibAVGO50, fibAVGO618, priceAVGO, qtyAVGO_382, qtyAVGO_50, qtyAVGO_618] = fibCheck(symAVGO, swingHighAVGO, swingLowAVGO, dollarAVGO)
+[hitGOOG382, hitGOOG50, hitGOOG618, fibGOOG382, fibGOOG50, fibGOOG618, priceGOOG, qtyGOOG_382, qtyGOOG_50, qtyGOOG_618] = fibCheck(symGOOG, swingHighGOOG, swingLowGOOG, dollarGOOG)
+[hitMRVL382, hitMRVL50, hitMRVL618, fibMRVL382, fibMRVL50, fibMRVL618, priceMRVL, qtyMRVL_382, qtyMRVL_50, qtyMRVL_618] = fibCheck(symMRVL, swingHighMRVL, swingLowMRVL, dollarMRVL)
+[hitMSTR382, hitMSTR50, hitMSTR618, fibMSTR382, fibMSTR50, fibMSTR618, priceMSTR, qtyMSTR_382, qtyMSTR_50, qtyMSTR_618] = fibCheck(symMSTR, swingHighMSTR, swingLowMSTR, dollarMSTR)
+[hitMU382, hitMU50, hitMU618, fibMU382, fibMU50, fibMU618, priceMU, qtyMU_382, qtyMU_50, qtyMU_618] = fibCheck(symMU, swingHighMU, swingLowMU, dollarMU)
+[hitNVDA382, hitNVDA50, hitNVDA618, fibNVDA382, fibNVDA50, fibNVDA618, priceNVDA, qtyNVDA_382, qtyNVDA_50, qtyNVDA_618] = fibCheck(symNVDA, swingHighNVDA, swingLowNVDA, dollarNVDA)
+[hitPLTR382, hitPLTR50, hitPLTR618, fibPLTR382, fibPLTR50, fibPLTR618, pricePLTR, qtyPLTR_382, qtyPLTR_50, qtyPLTR_618] = fibCheck(symPLTR, swingHighPLTR, swingLowPLTR, dollarPLTR)
+[hitTSLA382, hitTSLA50, hitTSLA618, fibTSLA382, fibTSLA50, fibTSLA618, priceTSLA, qtyTSLA_382, qtyTSLA_50, qtyTSLA_618] = fibCheck(symTSLA, swingHighTSLA, swingLowTSLA, dollarTSLA)
+[hitTSM382, hitTSM50, hitTSM618, fibTSM382, fibTSM50, fibTSM618, priceTSM, qtyTSM_382, qtyTSM_50, qtyTSM_618] = fibCheck(symTSM, swingHighTSM, swingLowTSM, dollarTSM)
+
+// ========== DEBUG: AUTO-CALCULATED VALUES ==========
+// These plots show the auto-calculated swing high/low values for each stock
+// Disabled by default - enable in Style tab if you want to see values in data window
+plot(autoHighALAB, title="ALAB Auto High", color=color.green, display=display.none)
+plot(autoLowALAB, title="ALAB Auto Low", color=color.red, display=display.none)
+plot(autoHighAMD, title="AMD Auto High", color=color.green, display=display.none)
+plot(autoLowAMD, title="AMD Auto Low", color=color.red, display=display.none)
+plot(autoHighARM, title="ARM Auto High", color=color.green, display=display.none)
+plot(autoLowARM, title="ARM Auto Low", color=color.red, display=display.none)
+plot(autoHighASML, title="ASML Auto High", color=color.green, display=display.none)
+plot(autoLowASML, title="ASML Auto Low", color=color.red, display=display.none)
+plot(autoHighAVGO, title="AVGO Auto High", color=color.green, display=display.none)
+plot(autoLowAVGO, title="AVGO Auto Low", color=color.red, display=display.none)
+plot(autoHighGOOG, title="GOOG Auto High", color=color.green, display=display.none)
+plot(autoLowGOOG, title="GOOG Auto Low", color=color.red, display=display.none)
+plot(autoHighMRVL, title="MRVL Auto High", color=color.green, display=display.none)
+plot(autoLowMRVL, title="MRVL Auto Low", color=color.red, display=display.none)
+plot(autoHighMSTR, title="MSTR Auto High", color=color.green, display=display.none)
+plot(autoLowMSTR, title="MSTR Auto Low", color=color.red, display=display.none)
+plot(autoHighMU, title="MU Auto High", color=color.green, display=display.none)
+plot(autoLowMU, title="MU Auto Low", color=color.red, display=display.none)
+plot(autoHighNVDA, title="NVDA Auto High", color=color.green, display=display.none)
+plot(autoLowNVDA, title="NVDA Auto Low", color=color.red, display=display.none)
+plot(autoHighPLTR, title="PLTR Auto High", color=color.green, display=display.none)
+plot(autoLowPLTR, title="PLTR Auto Low", color=color.red, display=display.none)
+plot(autoHighTSLA, title="TSLA Auto High", color=color.green, display=display.none)
+plot(autoLowTSLA, title="TSLA Auto Low", color=color.red, display=display.none)
+plot(autoHighTSM, title="TSM Auto High", color=color.green, display=display.none)
+plot(autoLowTSM, title="TSM Auto Low", color=color.red, display=display.none)
+
+// ========== TOTAL HITS COUNTER ==========
+totalHits = 0
+totalHits := totalHits + hitALAB382 + hitALAB50 + hitALAB618
+totalHits := totalHits + hitAMD382 + hitAMD50 + hitAMD618
+totalHits := totalHits + hitARM382 + hitARM50 + hitARM618
+totalHits := totalHits + hitASML382 + hitASML50 + hitASML618
+totalHits := totalHits + hitAVGO382 + hitAVGO50 + hitAVGO618
+totalHits := totalHits + hitGOOG382 + hitGOOG50 + hitGOOG618
+totalHits := totalHits + hitMRVL382 + hitMRVL50 + hitMRVL618
+totalHits := totalHits + hitMSTR382 + hitMSTR50 + hitMSTR618
+totalHits := totalHits + hitMU382 + hitMU50 + hitMU618
+totalHits := totalHits + hitNVDA382 + hitNVDA50 + hitNVDA618
+totalHits := totalHits + hitPLTR382 + hitPLTR50 + hitPLTR618
+totalHits := totalHits + hitTSLA382 + hitTSLA50 + hitTSLA618
+totalHits := totalHits + hitTSM382 + hitTSM50 + hitTSM618
+
+// ========== DISPLAY ==========
+plot(showStatus ? totalHits : na, title="Fib Hits", color=color.blue, linewidth=2)
+
+// ========== ALERTS FOR ALAB ==========
+if hitALAB382 == 1
+    alert("BUY ALAB - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibALAB382, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_382), alert.freq_all)
+if hitALAB382 == -1
+    alert("BUY ALAB - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibALAB382, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_382), alert.freq_all)
+if hitALAB50 == 1
+    alert("BUY ALAB - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibALAB50, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_50), alert.freq_all)
+if hitALAB50 == -1
+    alert("BUY ALAB - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibALAB50, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_50), alert.freq_all)
+if hitALAB618 == 1
+    alert("BUY ALAB - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibALAB618, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_618), alert.freq_all)
+if hitALAB618 == -1
+    alert("BUY ALAB - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibALAB618, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_618), alert.freq_all)
+
+// ========== ALERTS FOR AMD ==========
+if hitAMD382 == 1
+    alert("BUY AMD - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibAMD382, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_382), alert.freq_all)
+if hitAMD382 == -1
+    alert("BUY AMD - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibAMD382, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_382), alert.freq_all)
+if hitAMD50 == 1
+    alert("BUY AMD - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibAMD50, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_50), alert.freq_all)
+if hitAMD50 == -1
+    alert("BUY AMD - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibAMD50, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_50), alert.freq_all)
+if hitAMD618 == 1
+    alert("BUY AMD - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibAMD618, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_618), alert.freq_all)
+if hitAMD618 == -1
+    alert("BUY AMD - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibAMD618, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_618), alert.freq_all)
+
+// ========== ALERTS FOR ARM ==========
+if hitARM382 == 1
+    alert("BUY ARM - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibARM382, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_382), alert.freq_all)
+if hitARM382 == -1
+    alert("BUY ARM - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibARM382, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_382), alert.freq_all)
+if hitARM50 == 1
+    alert("BUY ARM - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibARM50, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_50), alert.freq_all)
+if hitARM50 == -1
+    alert("BUY ARM - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibARM50, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_50), alert.freq_all)
+if hitARM618 == 1
+    alert("BUY ARM - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibARM618, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_618), alert.freq_all)
+if hitARM618 == -1
+    alert("BUY ARM - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibARM618, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_618), alert.freq_all)
+
+// ========== ALERTS FOR ASML ==========
+if hitASML382 == 1
+    alert("BUY ASML - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibASML382, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_382), alert.freq_all)
+if hitASML382 == -1
+    alert("BUY ASML - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibASML382, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_382), alert.freq_all)
+if hitASML50 == 1
+    alert("BUY ASML - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibASML50, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_50), alert.freq_all)
+if hitASML50 == -1
+    alert("BUY ASML - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibASML50, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_50), alert.freq_all)
+if hitASML618 == 1
+    alert("BUY ASML - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibASML618, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_618), alert.freq_all)
+if hitASML618 == -1
+    alert("BUY ASML - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibASML618, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_618), alert.freq_all)
+
+// ========== ALERTS FOR AVGO ==========
+if hitAVGO382 == 1
+    alert("BUY AVGO - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibAVGO382, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_382), alert.freq_all)
+if hitAVGO382 == -1
+    alert("BUY AVGO - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibAVGO382, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_382), alert.freq_all)
+if hitAVGO50 == 1
+    alert("BUY AVGO - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibAVGO50, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_50), alert.freq_all)
+if hitAVGO50 == -1
+    alert("BUY AVGO - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibAVGO50, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_50), alert.freq_all)
+if hitAVGO618 == 1
+    alert("BUY AVGO - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibAVGO618, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_618), alert.freq_all)
+if hitAVGO618 == -1
+    alert("BUY AVGO - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibAVGO618, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_618), alert.freq_all)
+
+// ========== ALERTS FOR GOOG ==========
+if hitGOOG382 == 1
+    alert("BUY GOOG - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibGOOG382, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_382), alert.freq_all)
+if hitGOOG382 == -1
+    alert("BUY GOOG - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibGOOG382, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_382), alert.freq_all)
+if hitGOOG50 == 1
+    alert("BUY GOOG - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibGOOG50, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_50), alert.freq_all)
+if hitGOOG50 == -1
+    alert("BUY GOOG - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibGOOG50, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_50), alert.freq_all)
+if hitGOOG618 == 1
+    alert("BUY GOOG - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibGOOG618, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_618), alert.freq_all)
+if hitGOOG618 == -1
+    alert("BUY GOOG - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibGOOG618, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_618), alert.freq_all)
+
+// ========== ALERTS FOR MRVL ==========
+if hitMRVL382 == 1
+    alert("BUY MRVL - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibMRVL382, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_382), alert.freq_all)
+if hitMRVL382 == -1
+    alert("BUY MRVL - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibMRVL382, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_382), alert.freq_all)
+if hitMRVL50 == 1
+    alert("BUY MRVL - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibMRVL50, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_50), alert.freq_all)
+if hitMRVL50 == -1
+    alert("BUY MRVL - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibMRVL50, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_50), alert.freq_all)
+if hitMRVL618 == 1
+    alert("BUY MRVL - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibMRVL618, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_618), alert.freq_all)
+if hitMRVL618 == -1
+    alert("BUY MRVL - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibMRVL618, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_618), alert.freq_all)
+
+// ========== ALERTS FOR MSTR ==========
+if hitMSTR382 == 1
+    alert("BUY MSTR - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibMSTR382, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_382), alert.freq_all)
+if hitMSTR382 == -1
+    alert("BUY MSTR - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibMSTR382, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_382), alert.freq_all)
+if hitMSTR50 == 1
+    alert("BUY MSTR - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibMSTR50, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_50), alert.freq_all)
+if hitMSTR50 == -1
+    alert("BUY MSTR - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibMSTR50, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_50), alert.freq_all)
+if hitMSTR618 == 1
+    alert("BUY MSTR - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibMSTR618, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_618), alert.freq_all)
+if hitMSTR618 == -1
+    alert("BUY MSTR - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibMSTR618, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_618), alert.freq_all)
+
+// ========== ALERTS FOR MU ==========
+if hitMU382 == 1
+    alert("BUY MU - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibMU382, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_382), alert.freq_all)
+if hitMU382 == -1
+    alert("BUY MU - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibMU382, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_382), alert.freq_all)
+if hitMU50 == 1
+    alert("BUY MU - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibMU50, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_50), alert.freq_all)
+if hitMU50 == -1
+    alert("BUY MU - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibMU50, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_50), alert.freq_all)
+if hitMU618 == 1
+    alert("BUY MU - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibMU618, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_618), alert.freq_all)
+if hitMU618 == -1
+    alert("BUY MU - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibMU618, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_618), alert.freq_all)
+
+// ========== ALERTS FOR NVDA ==========
+if hitNVDA382 == 1
+    alert("BUY NVDA - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibNVDA382, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_382), alert.freq_all)
+if hitNVDA382 == -1
+    alert("BUY NVDA - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibNVDA382, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_382), alert.freq_all)
+if hitNVDA50 == 1
+    alert("BUY NVDA - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibNVDA50, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_50), alert.freq_all)
+if hitNVDA50 == -1
+    alert("BUY NVDA - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibNVDA50, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_50), alert.freq_all)
+if hitNVDA618 == 1
+    alert("BUY NVDA - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibNVDA618, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_618), alert.freq_all)
+if hitNVDA618 == -1
+    alert("BUY NVDA - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibNVDA618, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_618), alert.freq_all)
+
+// ========== ALERTS FOR PLTR ==========
+if hitPLTR382 == 1
+    alert("BUY PLTR - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibPLTR382, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_382), alert.freq_all)
+if hitPLTR382 == -1
+    alert("BUY PLTR - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibPLTR382, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_382), alert.freq_all)
+if hitPLTR50 == 1
+    alert("BUY PLTR - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibPLTR50, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_50), alert.freq_all)
+if hitPLTR50 == -1
+    alert("BUY PLTR - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibPLTR50, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_50), alert.freq_all)
+if hitPLTR618 == 1
+    alert("BUY PLTR - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibPLTR618, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_618), alert.freq_all)
+if hitPLTR618 == -1
+    alert("BUY PLTR - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibPLTR618, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_618), alert.freq_all)
+
+// ========== ALERTS FOR TSLA ==========
+if hitTSLA382 == 1
+    alert("BUY TSLA - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibTSLA382, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_382), alert.freq_all)
+if hitTSLA382 == -1
+    alert("BUY TSLA - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibTSLA382, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_382), alert.freq_all)
+if hitTSLA50 == 1
+    alert("BUY TSLA - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibTSLA50, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_50), alert.freq_all)
+if hitTSLA50 == -1
+    alert("BUY TSLA - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibTSLA50, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_50), alert.freq_all)
+if hitTSLA618 == 1
+    alert("BUY TSLA - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibTSLA618, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_618), alert.freq_all)
+if hitTSLA618 == -1
+    alert("BUY TSLA - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibTSLA618, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_618), alert.freq_all)
+
+// ========== ALERTS FOR TSM ==========
+if hitTSM382 == 1
+    alert("BUY TSM - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibTSM382, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_382), alert.freq_all)
+if hitTSM382 == -1
+    alert("BUY TSM - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibTSM382, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_382), alert.freq_all)
+if hitTSM50 == 1
+    alert("BUY TSM - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibTSM50, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_50), alert.freq_all)
+if hitTSM50 == -1
+    alert("BUY TSM - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibTSM50, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_50), alert.freq_all)
+if hitTSM618 == 1
+    alert("BUY TSM - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibTSM618, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_618), alert.freq_all)
+if hitTSM618 == -1
+    alert("BUY TSM - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibTSM618, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_618), alert.freq_all)

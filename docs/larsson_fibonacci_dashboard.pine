@@ -1,0 +1,361 @@
+//@version=5
+indicator("Larsson-Fibonacci Trading Dashboard v2", overlay=true)
+
+// ========== INPUTS ==========
+// Larsson Line Settings
+larssonV1 = input.int(15, title="Larsson V1 (Fast)", minval=1, group="Larsson Line")
+larssonM1 = input.int(19, title="Larsson M1", minval=1, group="Larsson Line")
+larssonM2 = input.int(25, title="Larsson M2", minval=1, group="Larsson Line")
+larssonV2 = input.int(29, title="Larsson V2 (Slow)", minval=1, group="Larsson Line")
+
+// Fibonacci Settings
+lookbackPeriod = input.int(100, title="Lookback Period for Swing High/Low", minval=10, group="Fibonacci")
+manualSwingHigh = input.float(0.0, title="Manual Swing High (0 = Auto)", minval=0.0, group="Fibonacci")
+manualSwingLow = input.float(0.0, title="Manual Swing Low (0 = Auto)", minval=0.0, group="Fibonacci")
+fibTolerance = input.float(2.0, title="Fib Level Tolerance %", minval=0.1, maxval=5.0, group="Fibonacci")
+
+// Position Sizing - Pullback (Crossing DOWN from above - Strong)
+alloc382Pullback = input.int(20, title="38.2% Pullback Allocation %", minval=1, maxval=100, group="Position Sizing")
+alloc500Pullback = input.int(30, title="50.0% Pullback Allocation %", minval=1, maxval=100, group="Position Sizing")
+alloc618Pullback = input.int(50, title="61.8% Pullback Allocation %", minval=1, maxval=100, group="Position Sizing")
+
+// Position Sizing - Recovery (Crossing UP from below - Weak)
+alloc382Recovery = input.int(10, title="38.2% Recovery Allocation %", minval=1, maxval=100, group="Position Sizing")
+alloc500Recovery = input.int(15, title="50.0% Recovery Allocation %", minval=1, maxval=100, group="Position Sizing")
+alloc618Recovery = input.int(25, title="61.8% Recovery Allocation %", minval=1, maxval=100, group="Position Sizing")
+
+// Volume Settings
+volumeShortPeriod = input.int(3, title="Volume Short Period", minval=1, group="Volume")
+volumeLongPeriod = input.int(20, title="Volume Long Period", minval=1, group="Volume")
+
+// Dashboard Settings
+showDashboard = input.bool(true, title="Show Dashboard", group="Display")
+dashboardPosition = input.string("Top Right", title="Dashboard Position", 
+     options=["Top Left", "Top Right", "Bottom Left", "Bottom Right"], group="Display")
+dashboardSize = input.string("Normal", title="Dashboard Size", 
+     options=["Small", "Normal", "Large"], group="Display")
+showFibLines = input.bool(true, title="Show Fibonacci Lines on Chart", group="Display")
+show200SMALines = input.bool(false, title="Show 200 SMA Lines on Chart", group="Display")
+
+// 200 SMA Line Settings
+sma200DailyColor = input.color(color.red, title="Daily 200 SMA Color", group="200 SMA Settings")
+sma200DailyWidth = input.int(1, title="Daily 200 SMA Width", minval=1, maxval=5, group="200 SMA Settings")
+sma200WeeklyColor = input.color(color.black, title="Weekly 200 SMA Color", group="200 SMA Settings")
+sma200WeeklyWidth = input.int(2, title="Weekly 200 SMA Width", minval=1, maxval=5, group="200 SMA Settings")
+
+// Fibonacci Line Settings
+fibLineWidth = input.int(2, title="Fibonacci Line Width", minval=1, maxval=5, group="Fibonacci Lines")
+fibColorAbove = input.color(color.new(color.green, 30), title="Color When Price Above Level", group="Fibonacci Lines")
+fibColorBelow = input.color(color.new(color.red, 30), title="Color When Price Below Level", group="Fibonacci Lines")
+fibLabelSize = input.string("Small", title="Label Size", options=["Tiny", "Small", "Normal", "Large", "Huge"], group="Fibonacci Lines")
+
+// ========== LARSSON LINE CALCULATION ==========
+// Using RMA (Running Moving Average) which is equivalent to SMMA
+v1 = ta.rma(close, larssonV1)
+m1 = ta.rma(close, larssonM1)
+m2 = ta.rma(close, larssonM2)
+v2 = ta.rma(close, larssonV2)
+
+// Get weekly data
+[weeklyV1, weeklyM1, weeklyM2, weeklyV2] = request.security(syminfo.tickerid, "W", 
+     [ta.rma(close, larssonV1), ta.rma(close, larssonM1), ta.rma(close, larssonM2), ta.rma(close, larssonV2)])
+
+// Determine Larsson status
+// GOLD = Bullish (all aligned upward)
+// BLUE = Bearish (all aligned downward)
+// GRAY = Neutral (mixed)
+
+isWeeklyBullish = weeklyV1 > weeklyV2 and weeklyV1 > weeklyM1 and weeklyM1 > weeklyM2 and weeklyM2 > weeklyV2
+isWeeklyBearish = weeklyV1 < weeklyV2 and weeklyV1 < weeklyM1 and weeklyM1 < weeklyM2 and weeklyM2 < weeklyV2
+
+weeklyLarssonStatus = isWeeklyBullish ? "GOLD" : isWeeklyBearish ? "BLUE" : "GRAY"
+weeklyLarssonColor = isWeeklyBullish ? color.new(color.yellow, 0) : isWeeklyBearish ? color.new(color.blue, 0) : color.new(color.gray, 0)
+
+isDailyBullish = v1 > v2 and v1 > m1 and m1 > m2 and m2 > v2
+isDailyBearish = v1 < v2 and v1 < m1 and m1 < m2 and m2 < v2
+
+dailyLarssonStatus = isDailyBullish ? "GOLD" : isDailyBearish ? "BLUE" : "GRAY"
+
+// ========== 200 SMAs ==========
+sma200Daily = ta.sma(close, 200)
+sma200Weekly = request.security(syminfo.tickerid, "W", ta.sma(close, 200))
+
+priceAboveDaily200 = close > sma200Daily
+priceAboveWeekly200 = close > sma200Weekly
+
+distanceFromDaily200 = ((close - sma200Daily) / sma200Daily) * 100
+distanceFromWeekly200 = ((close - sma200Weekly) / sma200Weekly) * 100
+
+// ========== FIBONACCI LEVELS ==========
+// Auto-calculate swing high/low from DAILY timeframe (matching original indicator logic)
+// This ensures consistent Fibonacci levels regardless of chart timeframe
+autoSwingHigh = request.security(syminfo.tickerid, "D", ta.highest(high, lookbackPeriod))
+autoSwingLow = request.security(syminfo.tickerid, "D", ta.lowest(low, lookbackPeriod))
+
+// Use manual if provided, otherwise auto
+swingHigh = manualSwingHigh > 0.0 ? manualSwingHigh : autoSwingHigh
+swingLow = manualSwingLow > 0.0 ? manualSwingLow : autoSwingLow
+
+// Calculate Fibonacci retracement levels (same formula as original indicator)
+// Formula: High - (High - Low) * percentage
+priceRange = swingHigh - swingLow
+fib382 = swingHigh - (priceRange * 0.382)
+fib500 = swingHigh - (priceRange * 0.500)
+fib618 = swingHigh - (priceRange * 0.618)
+
+// Check if price is at Fibonacci levels (within tolerance)
+tolerance = (swingHigh - swingLow) * (fibTolerance / 100)
+atFib382 = math.abs(close - fib382) <= tolerance
+atFib500 = math.abs(close - fib500) <= tolerance
+atFib618 = math.abs(close - fib618) <= tolerance
+atAnyFibLevel = atFib382 or atFib500 or atFib618
+
+// Detect direction: Pullback (from above) vs Recovery (from below)
+// Check if previous bar was above or below the level
+wasPrevAbove382 = close[1] > fib382
+wasPrevAbove500 = close[1] > fib500
+wasPrevAbove618 = close[1] > fib618
+
+// Determine entry type for current level
+isPullback382 = atFib382 and wasPrevAbove382
+isPullback500 = atFib500 and wasPrevAbove500
+isPullback618 = atFib618 and wasPrevAbove618
+
+isRecovery382 = atFib382 and not wasPrevAbove382
+isRecovery500 = atFib500 and not wasPrevAbove500
+isRecovery618 = atFib618 and not wasPrevAbove618
+
+// Distance from current price to Fibonacci levels
+distToFib382 = ((fib382 - close) / close) * 100
+distToFib500 = ((fib500 - close) / close) * 100
+distToFib618 = ((fib618 - close) / close) * 100
+
+// ========== VOLUME ANALYSIS ==========
+volumeShortAvg = ta.sma(volume, volumeShortPeriod)
+volumeLongAvg = ta.sma(volume, volumeLongPeriod)
+volumeDeclining = volumeShortAvg < volumeLongAvg
+
+// ========== STOP LOSS CALCULATION ==========
+stopLoss = math.max(sma200Daily * 0.90, fib618 * 0.93)  // 10% below daily 200 or 7% below 61.8%
+stopLossRisk = ((close - stopLoss) / close) * 100
+
+// ========== TRADING SIGNAL LOGIC ==========
+// BUY conditions
+buyCondition = weeklyLarssonStatus == "GOLD" and 
+     priceAboveWeekly200 and 
+     priceAboveDaily200 and 
+     atAnyFibLevel and 
+     volumeDeclining
+
+// Determine which level is hit and allocation based on direction
+currentFibLevel = atFib618 ? "61.8%" : atFib500 ? "50.0%" : atFib382 ? "38.2%" : "NONE"
+currentFibPrice = atFib618 ? fib618 : atFib500 ? fib500 : atFib382 ? fib382 : na
+
+// Determine if pullback or recovery
+isPullbackEntry = (atFib618 and isPullback618) or (atFib500 and isPullback500) or (atFib382 and isPullback382)
+isRecoveryEntry = (atFib618 and isRecovery618) or (atFib500 and isRecovery500) or (atFib382 and isRecovery382)
+
+// Set allocation based on level and direction
+currentAllocation = atFib618 ? (isPullback618 ? alloc618Pullback : alloc618Recovery) : 
+     atFib500 ? (isPullback500 ? alloc500Pullback : alloc500Recovery) : 
+     atFib382 ? (isPullback382 ? alloc382Pullback : alloc382Recovery) : 0
+
+entryType = isPullbackEntry ? "Pullback" : isRecoveryEntry ? "Recovery" : ""
+
+// EXIT conditions
+exitPartial = weeklyLarssonStatus == "GRAY"  // Exit 50%
+exitFull = weeklyLarssonStatus == "BLUE" or not priceAboveWeekly200  // Exit 100%
+
+// Overall signal
+signal = exitFull ? "EXIT 100%" : 
+     exitPartial ? "EXIT 50%" : 
+     buyCondition ? "BUY" : 
+     weeklyLarssonStatus == "GOLD" ? "WAIT" : "NO SETUP"
+
+signalColor = exitFull ? color.new(color.red, 0) : 
+     exitPartial ? color.new(color.orange, 0) : 
+     buyCondition ? color.new(color.lime, 0) : 
+     color.new(color.yellow, 30)
+
+// ========== DASHBOARD TABLE ==========
+if showDashboard
+    var table dashboard = table.new(position = dashboardPosition == "Top Left" ? position.top_left : dashboardPosition == "Top Right" ? position.top_right : dashboardPosition == "Bottom Left" ? position.bottom_left : position.bottom_right, columns = 2, rows = 20, bgcolor = color.new(color.black, 10), border_width = 2, border_color = signalColor)
+    
+    // Clear table to prevent duplication
+    table.clear(dashboard, 0, 0, 1, 19)
+    
+    textSize = dashboardSize == "Small" ? size.small : dashboardSize == "Large" ? size.large : size.normal
+    
+    // Pre-calculate all text values
+    volumeDisplayText = volumeDeclining ? "Declining ✓" : "Rising ✗"
+    volumeDisplayColor = volumeDeclining ? color.lime : color.red
+    swingHighText = "$" + str.tostring(swingHigh, "#.##")
+    swingLowText = "$" + str.tostring(swingLow, "#.##")
+    
+    // Header
+    table.cell(dashboard, 0, 0, "LARSSON-FIBONACCI TRADING", text_color=color.white, text_size=textSize, bgcolor=color.new(color.navy, 20))
+    table.merge_cells(dashboard, 0, 0, 1, 0)
+    
+    // Signal Row (large and prominent)
+    table.cell(dashboard, 0, 1, signal, text_color=color.white, text_size=size.huge, bgcolor=signalColor)
+    table.merge_cells(dashboard, 0, 1, 1, 1)
+    
+    // If BUY signal, show details
+    row = 2
+    if buyCondition
+        table.cell(dashboard, 0, row, "Level:", text_color=color.white, text_size=textSize)
+        table.cell(dashboard, 1, row, currentFibLevel + " ($" + str.tostring(currentFibPrice, "#.##") + ")", 
+             text_color=color.lime, text_size=textSize)
+        row += 1
+        
+        table.cell(dashboard, 0, row, "Entry Type:", text_color=color.white, text_size=textSize)
+        entryTypeColor = isPullbackEntry ? color.new(color.green, 0) : color.new(color.orange, 0)
+        table.cell(dashboard, 1, row, entryType, text_color=entryTypeColor, text_size=textSize)
+        row += 1
+        
+        table.cell(dashboard, 0, row, "Position Size:", text_color=color.white, text_size=textSize)
+        table.cell(dashboard, 1, row, str.tostring(currentAllocation) + "%", 
+             text_color=color.lime, text_size=textSize)
+        row += 1
+        
+        table.cell(dashboard, 0, row, "Stop Loss:", text_color=color.white, text_size=textSize)
+        table.cell(dashboard, 1, row, "$" + str.tostring(stopLoss, "#.##") + " (" + str.tostring(stopLossRisk, "#.#") + "% risk)", 
+             text_color=color.orange, text_size=textSize)
+        row += 1
+        
+        // Empty row
+        table.cell(dashboard, 0, row, "", text_size=textSize)
+        table.merge_cells(dashboard, 0, row, 1, row)
+        row += 1
+    
+    // Larsson Status (Weekly primary, Daily secondary)
+    table.cell(dashboard, 0, row, "Larsson:", text_color=color.white, text_size=textSize)
+    table.cell(dashboard, 1, row, "W:" + weeklyLarssonStatus + (weeklyLarssonStatus == "GOLD" ? "✓" : "") + " | D:" + dailyLarssonStatus, 
+         text_color=weeklyLarssonColor, text_size=textSize)
+    row += 1
+    
+    // 200 SMAs (combined)
+    table.cell(dashboard, 0, row, "200 SMA:", text_color=color.white, text_size=textSize)
+    table.cell(dashboard, 1, row, 
+         "W:" + (priceAboveWeekly200 ? "+" : "") + str.tostring(distanceFromWeekly200, "#.#") + "%" + (priceAboveWeekly200 ? "✓" : "✗") + " | D:" + (priceAboveDaily200 ? "+" : "") + str.tostring(distanceFromDaily200, "#.#") + "%" + (priceAboveDaily200 ? "✓" : "✗"), 
+         text_color=priceAboveWeekly200 ? color.lime : color.red, text_size=textSize)
+    row += 1
+    
+    // Volume
+    table.cell(dashboard, 0, row, "Volume:", text_color=color.white, text_size=textSize)
+    table.cell(dashboard, 1, row, volumeDisplayText, text_color=volumeDisplayColor, text_size=textSize)
+    row += 1
+    
+    // Swing Range (combined into one row)
+    table.cell(dashboard, 0, row, "Range:", text_color=color.gray, text_size=size.small)
+    table.cell(dashboard, 1, row, swingHighText + " - " + swingLowText, text_color=color.gray, text_size=size.small)
+    row += 1
+    
+    // Fibonacci Levels Header
+    table.cell(dashboard, 0, row, "Fibonacci Levels:", text_color=color.aqua, text_size=textSize)
+    table.merge_cells(dashboard, 0, row, 1, row)
+    row += 1
+    
+    // 38.2%
+    table.cell(dashboard, 0, row, "38.2% (" + str.tostring(alloc382Pullback) + "%/" + str.tostring(alloc382Recovery) + "%):", text_color=color.white, text_size=textSize)
+    table.cell(dashboard, 1, row, 
+         "$" + str.tostring(fib382, "#.##") + " (" + (distToFib382 > 0 ? "+" : "") + str.tostring(distToFib382, "#.#") + "%)" + (atFib382 ? " ◄" : ""), 
+         text_color=atFib382 ? color.lime : color.gray, text_size=textSize)
+    row += 1
+    
+    // 50.0%
+    table.cell(dashboard, 0, row, "50.0% (" + str.tostring(alloc500Pullback) + "%/" + str.tostring(alloc500Recovery) + "%):", text_color=color.white, text_size=textSize)
+    table.cell(dashboard, 1, row, 
+         "$" + str.tostring(fib500, "#.##") + " (" + (distToFib500 > 0 ? "+" : "") + str.tostring(distToFib500, "#.#") + "%)" + (atFib500 ? " ◄" : ""), 
+         text_color=atFib500 ? color.lime : color.gray, text_size=textSize)
+    row += 1
+    
+    // 61.8%
+    table.cell(dashboard, 0, row, "61.8% (" + str.tostring(alloc618Pullback) + "%/" + str.tostring(alloc618Recovery) + "%):", text_color=color.white, text_size=textSize)
+    table.cell(dashboard, 1, row, 
+         "$" + str.tostring(fib618, "#.##") + " (" + (distToFib618 > 0 ? "+" : "") + str.tostring(distToFib618, "#.#") + "%)" + (atFib618 ? " ◄" : ""), 
+         text_color=atFib618 ? color.lime : color.gray, text_size=textSize)
+    row += 1
+
+// ========== VISUAL PLOTS ==========
+// Determine label size
+labelSizeValue = fibLabelSize == "Tiny" ? size.tiny : fibLabelSize == "Small" ? size.small : fibLabelSize == "Normal" ? size.normal : fibLabelSize == "Large" ? size.large : size.huge
+
+// Plot Fibonacci levels as lines spanning from lookback period to current bar
+fib0Color = close > swingHigh ? fibColorAbove : fibColorBelow
+fib382Color = close > fib382 ? fibColorAbove : fibColorBelow
+fib500Color = close > fib500 ? fibColorAbove : fibColorBelow
+fib618Color = close > fib618 ? fibColorAbove : fibColorBelow
+fib1000Color = close > swingLow ? fibColorAbove : fibColorBelow
+
+// Calculate starting bar (lookback period bars ago)
+startBar = bar_index - lookbackPeriod
+
+// Draw lines and labels from lookback start to current bar
+var line line0 = na
+var line line382 = na
+var line line500 = na
+var line line618 = na
+var line line1000 = na
+
+var label label0 = na
+var label label382 = na
+var label label500 = na
+var label label618 = na
+var label label1000 = na
+
+if showFibLines and barstate.islast
+    // Delete previous lines and labels
+    line.delete(line0)
+    line.delete(line382)
+    line.delete(line500)
+    line.delete(line618)
+    line.delete(line1000)
+    
+    label.delete(label0)
+    label.delete(label382)
+    label.delete(label500)
+    label.delete(label618)
+    label.delete(label1000)
+    
+    // Draw lines
+    line0 := line.new(startBar, swingHigh, bar_index, swingHigh, color=fib0Color, width=fibLineWidth)
+    line382 := line.new(startBar, fib382, bar_index, fib382, color=fib382Color, width=fibLineWidth)
+    line500 := line.new(startBar, fib500, bar_index, fib500, color=fib500Color, width=fibLineWidth)
+    line618 := line.new(startBar, fib618, bar_index, fib618, color=fib618Color, width=fibLineWidth)
+    line1000 := line.new(startBar, swingLow, bar_index, swingLow, color=fib1000Color, width=fibLineWidth)
+    
+    // Draw labels with percentage and price
+    label0 := label.new(bar_index, swingHigh, "0% ( " + str.tostring(swingHigh, "#.##") + " )", 
+         textcolor=fib0Color, color=color.new(color.black, 100), style=label.style_label_left, yloc=yloc.price, size=labelSizeValue)
+    
+    label382 := label.new(bar_index, fib382, "38.2% ( " + str.tostring(fib382, "#.##") + " )", 
+         textcolor=fib382Color, color=color.new(color.black, 100), style=label.style_label_left, yloc=yloc.price, size=labelSizeValue)
+    
+    label500 := label.new(bar_index, fib500, "50% ( " + str.tostring(fib500, "#.##") + " )", 
+         textcolor=fib500Color, color=color.new(color.black, 100), style=label.style_label_left, yloc=yloc.price, size=labelSizeValue)
+    
+    label618 := label.new(bar_index, fib618, "61.8% ( " + str.tostring(fib618, "#.##") + " )", 
+         textcolor=fib618Color, color=color.new(color.black, 100), style=label.style_label_left, yloc=yloc.price, size=labelSizeValue)
+    
+    label1000 := label.new(bar_index, swingLow, "100% ( " + str.tostring(swingLow, "#.##") + " )", 
+         textcolor=fib1000Color, color=color.new(color.black, 100), style=label.style_label_left, yloc=yloc.price, size=labelSizeValue)
+
+// Plot 200 SMAs (conditional based on toggle)
+plot(show200SMALines ? sma200Daily : na, title="Daily 200 SMA", color=sma200DailyColor, linewidth=sma200DailyWidth)
+weeklyClose = request.security(syminfo.tickerid, "W", close)
+plot(show200SMALines ? sma200Weekly : na, title="Weekly 200 SMA", color=sma200WeeklyColor, linewidth=sma200WeeklyWidth)
+
+// ========== ALERTS ==========
+alertcondition(buyCondition, title="BUY Signal", message="BUY SIGNAL - Weekly GOLD - At Fibonacci Level - Volume Declining")
+alertcondition(exitPartial, title="EXIT 50%", message="EXIT 50% - Weekly Larsson turned GRAY")
+alertcondition(exitFull, title="EXIT 100%", message="EXIT 100% - Weekly Larsson BLUE or Weekly 200 SMA broken")
+
+// Alert when price approaches Fibonacci levels (within 3%)
+approachingFib382 = math.abs(distToFib382) <= 3.0 and not atFib382
+approachingFib500 = math.abs(distToFib500) <= 3.0 and not atFib500
+approachingFib618 = math.abs(distToFib618) <= 3.0 and not atFib618
+
+alertcondition(approachingFib382, title="Approaching Fib 38.2%", message="Price approaching Fibonacci 38.2% level")
+alertcondition(approachingFib500, title="Approaching Fib 50.0%", message="Price approaching Fibonacci 50.0% level")
+alertcondition(approachingFib618, title="Approaching Fib 61.8%", message="Price approaching Fibonacci 61.8% level")

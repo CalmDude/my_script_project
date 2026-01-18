@@ -47,6 +47,10 @@
             "target_low": null,
             "target_high": null
         },
+        "MSTR": {
+            "target_low": 121,
+            "target_high": null
+        },
         "MU": {
             "target_low": null,
             "target_high": null

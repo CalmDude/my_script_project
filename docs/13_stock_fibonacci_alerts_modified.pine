@@ -1,0 +1,156 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradeChartist
+
+//@version=4
+study("Fib Retracement", overlay=true, max_bars_back=5000)
+
+
+Fibs            = input("Plot Fibs based on Lookback", options = ["Plot Fibs based on Lookback", "Plot Fibs based on Price Input"], title = "Fibonacci Plot Type")
+
+FIBS            = Fibs == "Plot Fibs based on Lookback"?1:Fibs == "Plot Fibs based on Price Input"?2:na
+
+FP              = input(defval = 100, title = "Days to Lookback (Daily Timeframe Only)") 
+Reverse         = input(defval = false, title = "Reverse Fibonacci Levels?")
+
+
+Note            = input(true, "════ 𝗙𝗶𝗯𝘀 𝗯𝗮𝘀𝗲𝗱 𝗼𝗻 𝗣𝗿𝗶𝗰𝗲 𝗜𝗻𝗽𝘂𝘁 ════")
+High            = input(0., minval = 0,  title = "High - Enter Value")
+Low             = input(-1., minval = -1, title = "Low - Enter Value")
+
+
+Note2           = input(true, "══════ 𝗙𝗶𝗯 𝗟𝗶𝗻𝗲/𝗟𝗮𝗯𝗲𝗹 𝗦𝘁𝘆𝗹𝗲 ══════")
+Bull_Color      = input(#008000, type=input.color, title = "Support Fibs Color")
+Bear_Color      = input(#ff0000, type=input.color, title = "Resistance Fibs Color")
+CurrentFib      = input(false, "Show Fib Level of Current Price")
+Current_Color   = input(color.orange, type=input.color, title = "Current Fib Label Color")
+LineStyle       = input("Solid", options = ["Dotted", "Solid"], title = "Fib Line Style")
+LineWidth       = input(1, minval=1, maxval=5, title = "Fib Line Width")
+Ext             = input(false, "Extend Lines Left")
+ShowAsPercent   = input(true, "Show Levels as Percentages")
+ShowPriceValue  = input(true, "Show Price Values")
+
+
+Note3           = input(true, "════ 𝗧𝗼𝗴𝗴𝗹𝗲 𝗙𝗶𝗯 𝗟𝗲𝘃𝗲𝗹𝘀 ════")
+Show_Fib0       = input(true, "Show 0.000 Level")
+Show_Fib236     = input(false, "Show 0.236 Level")
+Show_Fib382     = input(true, "Show 0.382 Level")
+Show_Fib500     = input(true, "Show 0.500 Level")
+Show_Fib618     = input(true, "Show 0.618 Level")
+Show_Fib786     = input(false, "Show 0.786 Level")
+Show_Fib886     = input(false, "Show 0.886 Level")
+Show_Fib1000    = input(true, "Show 1.000 Level")
+Show_Fib1113    = input(false, "Show 1.113 Level")
+Show_Fib1272    = input(false, "Show 1.272 Level")
+Show_Fib1618    = input(false, "Show 1.618 Level")
+Show_Fib2000    = input(false, "Show 2.000 Level")
+Show_Fib2236    = input(false, "Show 2.236 Level")
+Show_Fib2618    = input(false, "Show 2.618 Level")
+Show_Fib3236    = input(false, "Show 3.236 Level")
+Show_Fib3618    = input(false, "Show 3.618 Level")
+Show_Fib4236    = input(false, "Show 4.236 Level")
+Show_Fib4618    = input(false, "Show 4.618 Level")
+
+
+// Transparency = input("Low", options = ["High", "Medium", "Low"], title="Fib Line Transparency")
+
+
+
+BullColor       = Bull_Color//Transparency == "High"?color.new(#008000,75):Transparency == "Medium"?color.new(#008000,50):Bull_Color
+BearColor       = Bear_Color//Transparency == "High"?color.new(#ff0000,75):Transparency == "Medium"?color.new(#ff0000,50):Bear_Color
+
+
+FPeriod         = FP
+
+ 
+Fhigh           = FIBS==1? highest(FPeriod) : FIBS == 2 and High == 0? highest(high,100): FIBS == 2 and High!=0? High:na
+Flow            = FIBS==1? lowest(FPeriod) : FIBS == 2 and Low == -1? lowest(low,100): FIBS == 2 and High!=-1? Low:na
+FH              = FIBS == 1?highestbars(high,FPeriod): 1
+FL              = FIBS == 1?lowestbars(low,FPeriod): 2
+revfibs         = not Reverse? FL>FH : FL<FH
+
+
+
+Fib_x(n) =>
+    revfibs ? (Fhigh-Flow)*n+Flow : Fhigh-(Fhigh-Flow)*n
+
+Current         = revfibs?(close-Flow)/(Fhigh-Flow):(Fhigh-close)/(Fhigh-Flow)
+
+var label Current_Fib_Label = na
+label.delete(Current_Fib_Label)
+
+if(CurrentFib and barstate.islast)
+    Current_Fib_Label := label.new(bar_index, close, tostring(Current, "##.##"), textcolor = Current_Color, color = color.new(#000000,100), style=label.style_label_left, yloc=yloc.price)
+
+
+
+
+EXTEND          = Ext?extend.left:extend.none 
+STYLE           = LineStyle=="Dotted"?line.style_dotted:line.style_solid
+WIDTH           = LineWidth
+
+BB = FIBS==1?(FL<FH?bar_index[-FL]:bar_index[-FH]):FIBS==2?bar_index[50]:bar_index[50]
+
+Fib_line(x)  => 
+    var line ln = na
+    line.delete(ln)
+    ln:=line.new(BB, x, bar_index, x, color = close>x? BullColor:BearColor, extend=EXTEND ,style=STYLE, width = WIDTH)
+    
+
+    
+Fib_label(x,_txt) => 
+    var label lbl = na
+    label.delete(lbl)
+    priceStr = ShowPriceValue ? tostring(x, "##.##") + " )" : ")"
+    lbl:=label.new(bar_index, x, _txt + priceStr, textcolor = close>x?BullColor:BearColor, color = color.new(#000000,100), style=label.style_label_left, yloc=yloc.price)
+
+
+
+Fib0        =    Show_Fib0?Fib_line(Fib_x(0)):na
+Fib236      =    Show_Fib236?Fib_line(Fib_x(0.236)):na
+Fib382      =    Show_Fib382?Fib_line(Fib_x(0.382)):na
+Fib500      =    Show_Fib500?Fib_line(Fib_x(0.500)):na
+Fib618      =    Show_Fib618?Fib_line(Fib_x(0.618)):na
+Fib786      =    Show_Fib786?Fib_line(Fib_x(0.786)):na
+Fib1000     =    Show_Fib1000?Fib_line(Fib_x(1.000)):na
+
+Fib886      =    Show_Fib886?Fib_line(Fib_x(0.886)):na
+
+if(FIBS==2)
+
+    Fib1113 =   Show_Fib1113?Fib_line(Fib_x(1.113)):na    
+    
+    Fib1272 =   Show_Fib1272?Fib_line(Fib_x(1.272)):na
+    Fib1618 =   Show_Fib1618?Fib_line(Fib_x(1.618)):na
+    Fib2000 =   Show_Fib2000?Fib_line(Fib_x(2.000)):na
+    Fib2236 =   Show_Fib2236?Fib_line(Fib_x(2.236)):na
+    Fib2618 =   Show_Fib2618?Fib_line(Fib_x(2.618)):na
+    Fib3236 =   Show_Fib3236?Fib_line(Fib_x(3.236)):na
+    Fib3618 =   Show_Fib3618?Fib_line(Fib_x(3.618)):na
+    Fib4236 =   Show_Fib4236?Fib_line(Fib_x(4.236)):na
+    Fib4618 =   Show_Fib4618?Fib_line(Fib_x(4.618)):na
+    
+
+LFib0       =      Show_Fib0?Fib_label(Fib_x(0), ShowAsPercent?"0% ( ":"0 ( "):na
+LFib236     =      Show_Fib236?Fib_label(Fib_x(0.236), ShowAsPercent?"23.6% ( ":"0.236 ( "):na
+LFib382     =      Show_Fib382?Fib_label(Fib_x(0.382), ShowAsPercent?"38.2% ( ":"0.382 ( "):na
+LFib500     =      Show_Fib500?Fib_label(Fib_x(0.500), ShowAsPercent?"50% ( ":"0.500 ( "):na
+LFib618     =      Show_Fib618?Fib_label(Fib_x(0.618), ShowAsPercent?"61.8% ( ":"0.618 ( "):na
+LFib786     =      Show_Fib786?Fib_label(Fib_x(0.786), ShowAsPercent?"78.6% ( ":"0.786 ( "):na
+LFib1000    =      Show_Fib1000?Fib_label(Fib_x(1.000), ShowAsPercent?"100% ( ":"1.000 ( "):na
+
+LFib886     =      Show_Fib886?Fib_label(Fib_x(0.886), ShowAsPercent?"88.6% ( ":"0.886 ( "):na
+
+
+if(FIBS==2)
+
+    LFib1113 =      Show_Fib1113?Fib_label(Fib_x(1.113), ShowAsPercent?"111.3% ( ":"1.113 ( "):na   
+    
+    LFib1272 =      Show_Fib1272?Fib_label(Fib_x(1.272), ShowAsPercent?"127.2% ( ":"1.272 ( "):na
+    LFib1618 =      Show_Fib1618?Fib_label(Fib_x(1.618), ShowAsPercent?"161.8% ( ":"1.618 ( "):na
+    LFib2000 =      Show_Fib2000?Fib_label(Fib_x(2.000), ShowAsPercent?"200% ( ":"2.000 ( "):na
+    LFib2236 =      Show_Fib2236?Fib_label(Fib_x(2.236), ShowAsPercent?"223.6% ( ":"2.236 ( "):na
+    LFib2618 =      Show_Fib2618?Fib_label(Fib_x(2.618), ShowAsPercent?"261.8% ( ":"2.618 ( "):na
+    LFib3236 =      Show_Fib3236?Fib_label(Fib_x(3.236), ShowAsPercent?"323.6% ( ":"3.236 ( "):na
+    LFib3618 =      Show_Fib3618?Fib_label(Fib_x(3.618), ShowAsPercent?"361.8% ( ":"3.618 ( "):na
+    LFib4236 =      Show_Fib4236?Fib_label(Fib_x(4.236), ShowAsPercent?"423.6% ( ":"4.236 ( "):na
+    LFib4618 =      Show_Fib4618?Fib_label(Fib_x(4.618), ShowAsPercent?"461.8% ( ":"4.618 ( "):na
