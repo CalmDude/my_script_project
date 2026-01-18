@@ -25,16 +25,21 @@ def test_scenario(name, config_data, usage_data):
     print(f"TEST SCENARIO: {name}")
     print(f"{'='*60}")
     
-    # Create temporary files
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as config_file:
-        json.dump(config_data, config_file)
-        config_path = config_file.name
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as usage_file:
-        json.dump(usage_data, usage_file)
-        usage_path = usage_file.name
+    # Create temporary files safely
+    config_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+    usage_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
     
     try:
+        # Write configuration data
+        json.dump(config_data, config_file)
+        config_file.close()
+        config_path = config_file.name
+        
+        # Write usage data
+        json.dump(usage_data, usage_file)
+        usage_file.close()
+        usage_path = usage_file.name
+        
         # Run calculator
         calculator = CopilotBillingCalculator(config_path, usage_path)
         calculator.print_billing_report()
@@ -46,9 +51,9 @@ def test_scenario(name, config_data, usage_data):
         print(f"  Actual overuse: {charges['overuse_details']['overuse_requests']} requests")
         
     finally:
-        # Cleanup
-        Path(config_path).unlink()
-        Path(usage_path).unlink()
+        # Cleanup safely - ignore errors if files don't exist
+        Path(config_file.name).unlink(missing_ok=True)
+        Path(usage_file.name).unlink(missing_ok=True)
 
 
 def main():

@@ -76,7 +76,8 @@ Customize your membership settings:
 - `monthly_fee`: Base monthly subscription cost
 - `included_requests`: Number of requests included in the base plan
 - `overage_rate_per_request`: Cost per request beyond included quota
-- `billing_cycle_start`: Day of month when billing occurs (1-28)
+- `billing_cycle_start`: Day of month when billing occurs (1-28 for reliability)
+  - **Note**: Values outside 1-28 will default to 1 to avoid issues with shorter months
 - `currency`: Currency code (USD, EUR, GBP, etc.)
 
 ### Usage Data (`data/copilot_usage.json`)

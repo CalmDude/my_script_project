@@ -74,15 +74,33 @@ class CopilotBillingCalculator:
         today = datetime.now()
         billing_day = self.config.get("billing_cycle_start", 1)
         
+        # Validate billing_day is in safe range (1-28)
+        if not isinstance(billing_day, int) or billing_day < 1 or billing_day > 28:
+            billing_day = 1  # Default to 1st of month if invalid
+        
         # If today's day is before billing day, next billing is this month
         if today.day < billing_day:
-            next_billing = datetime(today.year, today.month, billing_day)
+            try:
+                next_billing = datetime(today.year, today.month, billing_day)
+            except ValueError:
+                # Handle invalid date (e.g., Feb 30), use last day of month
+                if today.month == 12:
+                    next_billing = datetime(today.year + 1, 1, 1)
+                else:
+                    next_billing = datetime(today.year, today.month + 1, 1)
         else:
             # Otherwise, next billing is next month
-            if today.month == 12:
-                next_billing = datetime(today.year + 1, 1, billing_day)
-            else:
-                next_billing = datetime(today.year, today.month + 1, billing_day)
+            try:
+                if today.month == 12:
+                    next_billing = datetime(today.year + 1, 1, billing_day)
+                else:
+                    next_billing = datetime(today.year, today.month + 1, billing_day)
+            except ValueError:
+                # Handle invalid date, use first day of following month
+                if today.month == 12:
+                    next_billing = datetime(today.year + 1, 2, 1)
+                else:
+                    next_billing = datetime(today.year, today.month + 2, 1) if today.month < 11 else datetime(today.year + 1, 1, 1)
         
         return next_billing
     
