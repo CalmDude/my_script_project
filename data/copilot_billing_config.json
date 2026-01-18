@@ -1,0 +1,9 @@
+{
+  "membership_tier": "copilot_plus",
+  "monthly_fee": 10.00,
+  "included_requests": 1000,
+  "overage_rate_per_request": 0.01,
+  "billing_cycle_start": 1,
+  "currency": "USD",
+  "description": "Copilot+ membership with 1,000 included requests per month"
+}

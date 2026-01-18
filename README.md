@@ -8,6 +8,7 @@ A systematic weekly trading system that uses the GHB Strategy (Gold-Gray-Blue) t
 
 ## Features
 
+### Trading System
 - **GHB Signal System**: 4-state decision table (P1/P2/N1/N2) based on 200-day SMA and 4-week momentum
 - **Weekly Trading Rhythm**: Run Friday after 4pm ET, trade Monday morning - simple and disciplined
 - **Variable Position Sizing**: Custom allocations per ticker (e.g., TSLA 50%, NVDA 20%, others 10%)
@@ -16,6 +17,12 @@ A systematic weekly trading system that uses the GHB Strategy (Gold-Gray-Blue) t
 - **Universe Health Monitoring**: Automatic alerts when it's time to re-optimize your stock list
 - **Professional Reports**: PDF and CSV outputs with buy/sell signals and execution prices
 - **Backtesting Engine**: Test the strategy on historical data with configurable parameters
+
+### Billing & Cost Management
+- **Copilot+ Billing Calculator**: Calculate your next billing charges based on membership fee and overuse
+- **Usage Tracking**: Monitor API request usage and overage charges
+- **Cost Forecasting**: Predict upcoming charges before billing date
+- **Multiple Tier Support**: Configure for different membership plans
 
 ## Project Structure
 
@@ -30,20 +37,25 @@ portfolio_analyser/
 ├── data/                         # Portfolio data
 │   ├── ghb_optimized_portfolio.txt  # 25 S&P 500 stocks
 │   ├── portfolio_positions.csv      # Current positions
-│   └── portfolio_settings.json      # Configuration
+│   ├── portfolio_settings.json      # Configuration
+│   ├── copilot_billing_config.json  # Billing configuration
+│   └── copilot_usage.json           # Usage tracking data
 ├── docs/                         # Documentation
 │   ├── BACKTEST_ANALYSIS_REPORT.md  # Performance analysis
 │   ├── EXECUTION_GUIDE.md           # Monday execution guide
 │   ├── GHB_STRATEGY_GUIDE.md        # Strategy rules
 │   ├── PHASE1_QUICKSTART.md         # Getting started
-│   └── RE-OPTIMIZATION_GUIDE.md     # Annual universe refresh
+│   ├── RE-OPTIMIZATION_GUIDE.md     # Annual universe refresh
+│   └── COPILOT_BILLING_GUIDE.md     # 💰 Billing calculator guide
 ├── notebooks/                    # Jupyter notebooks
 │   ├── ghb_portfolio_scanner.ipynb       # ⭐ Main weekly scanner
 │   └── universe_reoptimization.ipynb     # Annual universe refresh
 ├── scripts/                      # Utilities
 │   ├── backup_and_push.ps1      # Git backup automation
 │   ├── backup_full.ps1          # Full backup (local + remote)
-│   └── add_position.py          # Add positions to portfolio
+│   ├── add_position.py          # Add positions to portfolio
+│   ├── copilot_billing_calculator.py  # 💰 Billing calculator
+│   └── test_copilot_billing.py  # Billing calculator tests
 ├── ghb_scanner_results/          # Scanner outputs
 │   ├── ghb_strategy_signals_[date].csv
 │   ├── ghb_strategy_signals_[date].pdf
@@ -137,6 +149,38 @@ Simple, clear signals based on price vs 200-day SMA and 4-week momentum:
 2. Run to screen S&P 500 (~10-15 minutes)
 3. Update universe with new top 25 stocks
 4. Transition portfolio over 2-8 weeks
+
+## Copilot+ Billing Calculator
+
+Calculate your next billing charges based on membership fee and overuse:
+
+```bash
+# Activate your virtual environment
+.\.venv\Scripts\activate
+
+# Run billing calculator
+python scripts/copilot_billing_calculator.py
+```
+
+**Sample Output:**
+```
+COPILOT+ MEMBERSHIP BILLING REPORT
+============================================================
+Membership Tier: COPILOT_PLUS
+Next Billing Date: 2026-02-01
+Days Until Billing: 13
+
+CHARGES BREAKDOWN
+Base Membership Fee: USD 10.00
+Overuse Charges:     USD 2.50
+TOTAL CHARGE:        USD 12.50
+```
+
+**Configuration:**
+- Edit `data/copilot_billing_config.json` for your membership settings
+- Update `data/copilot_usage.json` with your actual usage
+- See [docs/COPILOT_BILLING_GUIDE.md](docs/COPILOT_BILLING_GUIDE.md) for detailed guide
+
 - **NASDAQ 100**: ~100 stocks, 2-5 minutes
 
 Outputs filtered Excel and PDF reports with only FULL HOLD + ADD signals.
@@ -156,6 +200,7 @@ Outputs filtered Excel and PDF reports with only FULL HOLD + ADD signals.
 ### Getting Started
 - [docs/PHASE1_QUICKSTART.md](docs/PHASE1_QUICKSTART.md) - **Start here** - Setup guide
 - [docs/GHB_STRATEGY_GUIDE.md](docs/GHB_STRATEGY_GUIDE.md) - Strategy rules explained
+- [docs/COPILOT_BILLING_GUIDE.md](docs/COPILOT_BILLING_GUIDE.md) - **Billing calculator** - Calculate membership charges
 - [docs/EXECUTION_GUIDE.md](docs/EXECUTION_GUIDE.md) - Monday execution details
 - [docs/VARIABLE_ALLOCATION_GUIDE.md](docs/VARIABLE_ALLOCATION_GUIDE.md) - Variable position sizing setup
 
