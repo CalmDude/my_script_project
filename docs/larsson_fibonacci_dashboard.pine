@@ -13,16 +13,17 @@ lookbackPeriod = input.int(100, title="Lookback Period for Swing High/Low", minv
 manualSwingHigh = input.float(0.0, title="Manual Swing High (0 = Auto)", minval=0.0, group="Fibonacci")
 manualSwingLow = input.float(0.0, title="Manual Swing Low (0 = Auto)", minval=0.0, group="Fibonacci")
 fibTolerance = input.float(2.0, title="Fib Level Tolerance %", minval=0.1, maxval=5.0, group="Fibonacci")
+recoveryConfirmationBuffer = input.float(1.5, title="Recovery Confirmation Buffer %", minval=0.5, maxval=5.0, group="Fibonacci")
 
 // Position Sizing - Pullback (Crossing DOWN from above - Strong)
 alloc382Pullback = input.int(20, title="38.2% Pullback Allocation %", minval=1, maxval=100, group="Position Sizing")
 alloc500Pullback = input.int(30, title="50.0% Pullback Allocation %", minval=1, maxval=100, group="Position Sizing")
 alloc618Pullback = input.int(50, title="61.8% Pullback Allocation %", minval=1, maxval=100, group="Position Sizing")
 
-// Position Sizing - Recovery (Crossing UP from below - Weak)
-alloc382Recovery = input.int(10, title="38.2% Recovery Allocation %", minval=1, maxval=100, group="Position Sizing")
-alloc500Recovery = input.int(15, title="50.0% Recovery Allocation %", minval=1, maxval=100, group="Position Sizing")
-alloc618Recovery = input.int(25, title="61.8% Recovery Allocation %", minval=1, maxval=100, group="Position Sizing")
+// Position Sizing - Recovery (Crossing UP from below - Now requires confirmation)
+alloc382Recovery = input.int(20, title="38.2% Recovery Allocation %", minval=1, maxval=100, group="Position Sizing")
+alloc500Recovery = input.int(30, title="50.0% Recovery Allocation %", minval=1, maxval=100, group="Position Sizing")
+alloc618Recovery = input.int(50, title="61.8% Recovery Allocation %", minval=1, maxval=100, group="Position Sizing")
 
 // Volume Settings
 volumeShortPeriod = input.int(3, title="Volume Short Period", minval=1, group="Volume")
@@ -77,11 +78,14 @@ isDailyBearish = v1 < v2 and v1 < m1 and m1 < m2 and m2 < v2
 dailyLarssonStatus = isDailyBullish ? "GOLD" : isDailyBearish ? "BLUE" : "GRAY"
 
 // ========== 200 SMAs ==========
-sma200Daily = ta.sma(close, 200)
-sma200Weekly = request.security(syminfo.tickerid, "W", ta.sma(close, 200))
+sma200Daily = request.security(syminfo.tickerid, "D", ta.sma(close, 200), lookahead=barmerge.lookahead_off)
+sma200Weekly = request.security(syminfo.tickerid, "W", ta.sma(close, 200), lookahead=barmerge.lookahead_off)
 
+// Handle NaN for newer stocks without sufficient history
+// For Weekly 200 SMA: if not available (NaN), treat as passing the requirement
+// For Daily 200 SMA: keep strict requirement
 priceAboveDaily200 = close > sma200Daily
-priceAboveWeekly200 = close > sma200Weekly
+priceAboveWeekly200 = na(sma200Weekly) or close > sma200Weekly
 
 distanceFromDaily200 = ((close - sma200Daily) / sma200Daily) * 100
 distanceFromWeekly200 = ((close - sma200Weekly) / sma200Weekly) * 100
@@ -103,27 +107,43 @@ fib382 = swingHigh - (priceRange * 0.382)
 fib500 = swingHigh - (priceRange * 0.500)
 fib618 = swingHigh - (priceRange * 0.618)
 
-// Check if price is at Fibonacci levels (within tolerance)
-tolerance = (swingHigh - swingLow) * (fibTolerance / 100)
-atFib382 = math.abs(close - fib382) <= tolerance
-atFib500 = math.abs(close - fib500) <= tolerance
-atFib618 = math.abs(close - fib618) <= tolerance
-atAnyFibLevel = atFib382 or atFib500 or atFib618
-
 // Detect direction: Pullback (from above) vs Recovery (from below)
 // Check if previous bar was above or below the level
 wasPrevAbove382 = close[1] > fib382
 wasPrevAbove500 = close[1] > fib500
 wasPrevAbove618 = close[1] > fib618
 
-// Determine entry type for current level
-isPullback382 = atFib382 and wasPrevAbove382
-isPullback500 = atFib500 and wasPrevAbove500
-isPullback618 = atFib618 and wasPrevAbove618
+// Check if price is at Fibonacci levels (different rules for pullback vs recovery)
+tolerance = (swingHigh - swingLow) * (fibTolerance / 100)
 
-isRecovery382 = atFib382 and not wasPrevAbove382
-isRecovery500 = atFib500 and not wasPrevAbove500
-isRecovery618 = atFib618 and not wasPrevAbove618
+// For PULLBACK entries (from above): use tolerance
+atFib382Pullback = math.abs(close - fib382) <= tolerance and wasPrevAbove382
+atFib500Pullback = math.abs(close - fib500) <= tolerance and wasPrevAbove500
+atFib618Pullback = math.abs(close - fib618) <= tolerance and wasPrevAbove618
+
+// For RECOVERY entries (from below): require confirmation buffer
+recoveryBuffer382 = fib382 * (1 + recoveryConfirmationBuffer / 100)
+recoveryBuffer500 = fib500 * (1 + recoveryConfirmationBuffer / 100)
+recoveryBuffer618 = fib618 * (1 + recoveryConfirmationBuffer / 100)
+
+atFib382Recovery = close >= recoveryBuffer382 and not wasPrevAbove382
+atFib500Recovery = close >= recoveryBuffer500 and not wasPrevAbove500
+atFib618Recovery = close >= recoveryBuffer618 and not wasPrevAbove618
+
+// Combined: at ANY fib level (pullback OR recovery with proper confirmation)
+atFib382 = atFib382Pullback or atFib382Recovery
+atFib500 = atFib500Pullback or atFib500Recovery
+atFib618 = atFib618Pullback or atFib618Recovery
+atAnyFibLevel = atFib382 or atFib500 or atFib618
+
+// Determine entry type for current level
+isPullback382 = atFib382Pullback
+isPullback500 = atFib500Pullback
+isPullback618 = atFib618Pullback
+
+isRecovery382 = atFib382Recovery
+isRecovery500 = atFib500Recovery
+isRecovery618 = atFib618Recovery
 
 // Distance from current price to Fibonacci levels
 distToFib382 = ((fib382 - close) / close) * 100
@@ -257,21 +277,24 @@ if showDashboard
     row += 1
     
     // 38.2%
-    table.cell(dashboard, 0, row, "38.2% (" + str.tostring(alloc382Pullback) + "%/" + str.tostring(alloc382Recovery) + "%):", text_color=color.white, text_size=textSize)
+    alloc382Display = close > fib382 ? str.tostring(alloc382Pullback) : str.tostring(alloc382Recovery)
+    table.cell(dashboard, 0, row, "38.2% (" + alloc382Display + "%):", text_color=color.white, text_size=textSize)
     table.cell(dashboard, 1, row, 
          "$" + str.tostring(fib382, "#.##") + " (" + (distToFib382 > 0 ? "+" : "") + str.tostring(distToFib382, "#.#") + "%)" + (atFib382 ? " ◄" : ""), 
          text_color=atFib382 ? color.lime : color.gray, text_size=textSize)
     row += 1
     
     // 50.0%
-    table.cell(dashboard, 0, row, "50.0% (" + str.tostring(alloc500Pullback) + "%/" + str.tostring(alloc500Recovery) + "%):", text_color=color.white, text_size=textSize)
+    alloc500Display = close > fib500 ? str.tostring(alloc500Pullback) : str.tostring(alloc500Recovery)
+    table.cell(dashboard, 0, row, "50.0% (" + alloc500Display + "%):", text_color=color.white, text_size=textSize)
     table.cell(dashboard, 1, row, 
          "$" + str.tostring(fib500, "#.##") + " (" + (distToFib500 > 0 ? "+" : "") + str.tostring(distToFib500, "#.#") + "%)" + (atFib500 ? " ◄" : ""), 
          text_color=atFib500 ? color.lime : color.gray, text_size=textSize)
     row += 1
     
     // 61.8%
-    table.cell(dashboard, 0, row, "61.8% (" + str.tostring(alloc618Pullback) + "%/" + str.tostring(alloc618Recovery) + "%):", text_color=color.white, text_size=textSize)
+    alloc618Display = close > fib618 ? str.tostring(alloc618Pullback) : str.tostring(alloc618Recovery)
+    table.cell(dashboard, 0, row, "61.8% (" + alloc618Display + "%):", text_color=color.white, text_size=textSize)
     table.cell(dashboard, 1, row, 
          "$" + str.tostring(fib618, "#.##") + " (" + (distToFib618 > 0 ? "+" : "") + str.tostring(distToFib618, "#.#") + "%)" + (atFib618 ? " ◄" : ""), 
          text_color=atFib618 ? color.lime : color.gray, text_size=textSize)

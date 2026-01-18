@@ -4,6 +4,7 @@ indicator("Stock Fibonacci Alerts", overlay=false, dynamic_requests=true)
 // ========== LOOKBACK SETTINGS ==========
 lookbackPeriod = input.int(100, title="Days to Lookback for Auto Swing Calculation", minval=1)
 useAutoSwing = input.bool(true, title="Auto-Calculate Swing High/Low from Lookback")
+recoveryConfirmationBuffer = input.float(1.5, title="Recovery Confirmation Buffer %", minval=0.5, maxval=5.0, tooltip="Price must be this % above Fib level for recovery entry")
 
 // ========== STOCK 1: ALAB ==========
 symALAB = input.string("NASDAQ:ALAB", title="ALAB Symbol")
@@ -147,28 +148,36 @@ fibCheck(sym, swingHigh, swingLow, dollarAmount) =>
         fib50 = swingHigh - (priceRange * 0.5)
         fib618 = swingHigh - (priceRange * 0.618)
         
-        // Get current realtime price for intraday alerts
-        currentPrice = request.security(sym, timeframe.period, close)
+        // Get current realtime price for instant intraday alerts (tick-by-tick)
+        currentPrice = request.security(sym, "", close)
+        prevPrice = request.security(sym, "", close[1])
         
-        // Check if current price crosses below each Fibonacci level (RETRACEMENT - BUY)
+        // Calculate recovery confirmation buffers (price must be +1.5% above level for recovery)
+        recoveryBuffer382 = fib382 * (1 + recoveryConfirmationBuffer / 100)
+        recoveryBuffer500 = fib50 * (1 + recoveryConfirmationBuffer / 100)
+        recoveryBuffer618 = fib618 * (1 + recoveryConfirmationBuffer / 100)
+        
+        // Check if current price crosses below each Fibonacci level (PULLBACK - Strong buy signal)
         hitDown382 = ta.crossunder(currentPrice, fib382) ? 1 : 0
         hitDown50 = ta.crossunder(currentPrice, fib50) ? 1 : 0
         hitDown618 = ta.crossunder(currentPrice, fib618) ? 1 : 0
         
-        // Check if current price crosses above each Fibonacci level (BREAKOUT - SELL/TAKE PROFIT)
-        hitUp382 = ta.crossover(currentPrice, fib382) ? 1 : 0
-        hitUp50 = ta.crossover(currentPrice, fib50) ? 1 : 0
-        hitUp618 = ta.crossover(currentPrice, fib618) ? 1 : 0
+        // Check if current price crosses above recovery buffer (RECOVERY - Confirmed buy signal)
+        // Only triggers when price crosses above the buffer level (+1.5% above Fib level)
+        // This prevents false signals when price just touches the Fib level from below
+        hitUp382 = ta.crossover(currentPrice, recoveryBuffer382) ? 1 : 0
+        hitUp50 = ta.crossover(currentPrice, recoveryBuffer500) ? 1 : 0
+        hitUp618 = ta.crossover(currentPrice, recoveryBuffer618) ? 1 : 0
         
-        // Calculate quantities for CROSSING DOWN (buying dip) - 20%, 30%, 50% allocation
+        // Calculate quantities for CROSSING DOWN (pullback) - 20%, 30%, 50% allocation
         qtyDown382 = fib382 > 0 ? math.floor((dollarAmount * 0.20) / fib382) : 0
         qtyDown50 = fib50 > 0 ? math.floor((dollarAmount * 0.30) / fib50) : 0
         qtyDown618 = fib618 > 0 ? math.floor((dollarAmount * 0.50) / fib618) : 0
         
-        // Calculate quantities for CROSSING UP (taking profit) - 10%, 15%, 25% allocation
-        qtyUp382 = fib382 > 0 ? math.floor((dollarAmount * 0.10) / fib382) : 0
-        qtyUp50 = fib50 > 0 ? math.floor((dollarAmount * 0.15) / fib50) : 0
-        qtyUp618 = fib618 > 0 ? math.floor((dollarAmount * 0.25) / fib618) : 0
+        // Calculate quantities for CROSSING UP (recovery with confirmation) - 20%, 30%, 50% allocation
+        qtyUp382 = fib382 > 0 ? math.floor((dollarAmount * 0.20) / fib382) : 0
+        qtyUp50 = fib50 > 0 ? math.floor((dollarAmount * 0.30) / fib50) : 0
+        qtyUp618 = fib618 > 0 ? math.floor((dollarAmount * 0.50) / fib618) : 0
         
         // Combine hit signals (prioritize crossing down for return value)
         hit382 = hitDown382 > 0 ? hitDown382 : (hitUp382 > 0 ? -1 : 0)  // -1 indicates crossing up
@@ -250,182 +259,182 @@ plot(showStatus ? totalHits : na, title="Fib Hits", color=color.blue, linewidth=
 
 // ========== ALERTS FOR ALAB ==========
 if hitALAB382 == 1
-    alert("BUY ALAB - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibALAB382, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_382), alert.freq_all)
+    alert("BUY ALAB - Fib 38.2% Pullback ≤ " + str.tostring(fibALAB382, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_382), alert.freq_all)
 if hitALAB382 == -1
-    alert("BUY ALAB - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibALAB382, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_382), alert.freq_all)
+    alert("BUY ALAB - Fib 38.2% Recovery Confirmed ≥ " + str.tostring(fibALAB382, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_382), alert.freq_all)
 if hitALAB50 == 1
-    alert("BUY ALAB - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibALAB50, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_50), alert.freq_all)
+    alert("BUY ALAB - Fib 50.0% Pullback ≤ " + str.tostring(fibALAB50, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_50), alert.freq_all)
 if hitALAB50 == -1
-    alert("BUY ALAB - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibALAB50, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_50), alert.freq_all)
+    alert("BUY ALAB - Fib 50.0% Recovery Confirmed ≥ " + str.tostring(fibALAB50, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_50), alert.freq_all)
 if hitALAB618 == 1
-    alert("BUY ALAB - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibALAB618, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_618), alert.freq_all)
+    alert("BUY ALAB - Fib 61.8% Pullback ≤ " + str.tostring(fibALAB618, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_618), alert.freq_all)
 if hitALAB618 == -1
-    alert("BUY ALAB - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibALAB618, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_618), alert.freq_all)
+    alert("BUY ALAB - Fib 61.8% Recovery Confirmed ≥ " + str.tostring(fibALAB618, "#.##") + " | Price: " + str.tostring(priceALAB, "#.##") + " | BUY Qty: " + str.tostring(qtyALAB_618), alert.freq_all)
 
 // ========== ALERTS FOR AMD ==========
 if hitAMD382 == 1
-    alert("BUY AMD - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibAMD382, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_382), alert.freq_all)
+    alert("BUY AMD - Fib 38.2% Pullback ≤ " + str.tostring(fibAMD382, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_382), alert.freq_all)
 if hitAMD382 == -1
-    alert("BUY AMD - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibAMD382, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_382), alert.freq_all)
+    alert("BUY AMD - Fib 38.2% Recovery Confirmed ≥ " + str.tostring(fibAMD382, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_382), alert.freq_all)
 if hitAMD50 == 1
-    alert("BUY AMD - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibAMD50, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_50), alert.freq_all)
+    alert("BUY AMD - Fib 50.0% Pullback ≤ " + str.tostring(fibAMD50, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_50), alert.freq_all)
 if hitAMD50 == -1
-    alert("BUY AMD - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibAMD50, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_50), alert.freq_all)
+    alert("BUY AMD - Fib 50.0% Recovery Confirmed ≥ " + str.tostring(fibAMD50, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_50), alert.freq_all)
 if hitAMD618 == 1
-    alert("BUY AMD - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibAMD618, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_618), alert.freq_all)
+    alert("BUY AMD - Fib 61.8% Pullback ≤ " + str.tostring(fibAMD618, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_618), alert.freq_all)
 if hitAMD618 == -1
-    alert("BUY AMD - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibAMD618, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_618), alert.freq_all)
+    alert("BUY AMD - Fib 61.8% Recovery Confirmed ≥ " + str.tostring(fibAMD618, "#.##") + " | Price: " + str.tostring(priceAMD, "#.##") + " | BUY Qty: " + str.tostring(qtyAMD_618), alert.freq_all)
 
 // ========== ALERTS FOR ARM ==========
 if hitARM382 == 1
-    alert("BUY ARM - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibARM382, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_382), alert.freq_all)
+    alert("BUY ARM - Fib 38.2% Pullback ≤ " + str.tostring(fibARM382, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_382), alert.freq_all)
 if hitARM382 == -1
-    alert("BUY ARM - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibARM382, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_382), alert.freq_all)
+    alert("BUY ARM - Fib 38.2% Recovery Confirmed ≥ " + str.tostring(fibARM382, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_382), alert.freq_all)
 if hitARM50 == 1
-    alert("BUY ARM - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibARM50, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_50), alert.freq_all)
+    alert("BUY ARM - Fib 50.0% Pullback ≤ " + str.tostring(fibARM50, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_50), alert.freq_all)
 if hitARM50 == -1
-    alert("BUY ARM - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibARM50, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_50), alert.freq_all)
+    alert("BUY ARM - Fib 50.0% Recovery Confirmed ≥ " + str.tostring(fibARM50, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_50), alert.freq_all)
 if hitARM618 == 1
-    alert("BUY ARM - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibARM618, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_618), alert.freq_all)
+    alert("BUY ARM - Fib 61.8% Pullback ≤ " + str.tostring(fibARM618, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_618), alert.freq_all)
 if hitARM618 == -1
-    alert("BUY ARM - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibARM618, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_618), alert.freq_all)
+    alert("BUY ARM - Fib 61.8% Recovery Confirmed ≥ " + str.tostring(fibARM618, "#.##") + " | Price: " + str.tostring(priceARM, "#.##") + " | BUY Qty: " + str.tostring(qtyARM_618), alert.freq_all)
 
 // ========== ALERTS FOR ASML ==========
 if hitASML382 == 1
-    alert("BUY ASML - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibASML382, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_382), alert.freq_all)
+    alert("BUY ASML - Fib 38.2% Pullback ≤ " + str.tostring(fibASML382, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_382), alert.freq_all)
 if hitASML382 == -1
-    alert("BUY ASML - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibASML382, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_382), alert.freq_all)
+    alert("BUY ASML - Fib 38.2% Recovery Confirmed ≥ " + str.tostring(fibASML382, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_382), alert.freq_all)
 if hitASML50 == 1
-    alert("BUY ASML - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibASML50, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_50), alert.freq_all)
+    alert("BUY ASML - Fib 50.0% Pullback ≤ " + str.tostring(fibASML50, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_50), alert.freq_all)
 if hitASML50 == -1
-    alert("BUY ASML - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibASML50, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_50), alert.freq_all)
+    alert("BUY ASML - Fib 50.0% Recovery Confirmed ≥ " + str.tostring(fibASML50, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_50), alert.freq_all)
 if hitASML618 == 1
-    alert("BUY ASML - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibASML618, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_618), alert.freq_all)
+    alert("BUY ASML - Fib 61.8% Pullback ≤ " + str.tostring(fibASML618, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_618), alert.freq_all)
 if hitASML618 == -1
-    alert("BUY ASML - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibASML618, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_618), alert.freq_all)
+    alert("BUY ASML - Fib 61.8% Recovery Confirmed ≥ " + str.tostring(fibASML618, "#.##") + " | Price: " + str.tostring(priceASML, "#.##") + " | BUY Qty: " + str.tostring(qtyASML_618), alert.freq_all)
 
 // ========== ALERTS FOR AVGO ==========
 if hitAVGO382 == 1
-    alert("BUY AVGO - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibAVGO382, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_382), alert.freq_all)
+    alert("BUY AVGO - Fib 38.2% Pullback ≤ " + str.tostring(fibAVGO382, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_382), alert.freq_all)
 if hitAVGO382 == -1
-    alert("BUY AVGO - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibAVGO382, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_382), alert.freq_all)
+    alert("BUY AVGO - Fib 38.2% Recovery Confirmed ≥ " + str.tostring(fibAVGO382, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_382), alert.freq_all)
 if hitAVGO50 == 1
-    alert("BUY AVGO - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibAVGO50, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_50), alert.freq_all)
+    alert("BUY AVGO - Fib 50.0% Pullback ≤ " + str.tostring(fibAVGO50, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_50), alert.freq_all)
 if hitAVGO50 == -1
-    alert("BUY AVGO - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibAVGO50, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_50), alert.freq_all)
+    alert("BUY AVGO - Fib 50.0% Recovery Confirmed ≥ " + str.tostring(fibAVGO50, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_50), alert.freq_all)
 if hitAVGO618 == 1
-    alert("BUY AVGO - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibAVGO618, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_618), alert.freq_all)
+    alert("BUY AVGO - Fib 61.8% Pullback ≤ " + str.tostring(fibAVGO618, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_618), alert.freq_all)
 if hitAVGO618 == -1
-    alert("BUY AVGO - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibAVGO618, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_618), alert.freq_all)
+    alert("BUY AVGO - Fib 61.8% Recovery Confirmed ≥ " + str.tostring(fibAVGO618, "#.##") + " | Price: " + str.tostring(priceAVGO, "#.##") + " | BUY Qty: " + str.tostring(qtyAVGO_618), alert.freq_all)
 
 // ========== ALERTS FOR GOOG ==========
 if hitGOOG382 == 1
-    alert("BUY GOOG - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibGOOG382, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_382), alert.freq_all)
+    alert("BUY GOOG - Fib 38.2% Pullback ≤ " + str.tostring(fibGOOG382, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_382), alert.freq_all)
 if hitGOOG382 == -1
-    alert("BUY GOOG - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibGOOG382, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_382), alert.freq_all)
+    alert("BUY GOOG - Fib 38.2% Recovery Confirmed ≥ " + str.tostring(fibGOOG382, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_382), alert.freq_all)
 if hitGOOG50 == 1
-    alert("BUY GOOG - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibGOOG50, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_50), alert.freq_all)
+    alert("BUY GOOG - Fib 50.0% Pullback ≤ " + str.tostring(fibGOOG50, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_50), alert.freq_all)
 if hitGOOG50 == -1
-    alert("BUY GOOG - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibGOOG50, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_50), alert.freq_all)
+    alert("BUY GOOG - Fib 50.0% Recovery Confirmed ≥ " + str.tostring(fibGOOG50, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_50), alert.freq_all)
 if hitGOOG618 == 1
-    alert("BUY GOOG - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibGOOG618, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_618), alert.freq_all)
+    alert("BUY GOOG - Fib 61.8% Pullback ≤ " + str.tostring(fibGOOG618, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_618), alert.freq_all)
 if hitGOOG618 == -1
-    alert("BUY GOOG - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibGOOG618, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_618), alert.freq_all)
+    alert("BUY GOOG - Fib 61.8% Recovery Confirmed ≥ " + str.tostring(fibGOOG618, "#.##") + " | Price: " + str.tostring(priceGOOG, "#.##") + " | BUY Qty: " + str.tostring(qtyGOOG_618), alert.freq_all)
 
 // ========== ALERTS FOR MRVL ==========
 if hitMRVL382 == 1
-    alert("BUY MRVL - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibMRVL382, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_382), alert.freq_all)
+    alert("BUY MRVL - Fib 38.2% Pullback ≤ " + str.tostring(fibMRVL382, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_382), alert.freq_all)
 if hitMRVL382 == -1
-    alert("BUY MRVL - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibMRVL382, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_382), alert.freq_all)
+    alert("BUY MRVL - Fib 38.2% Recovery Confirmed ≥ " + str.tostring(fibMRVL382, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_382), alert.freq_all)
 if hitMRVL50 == 1
-    alert("BUY MRVL - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibMRVL50, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_50), alert.freq_all)
+    alert("BUY MRVL - Fib 50.0% Pullback ≤ " + str.tostring(fibMRVL50, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_50), alert.freq_all)
 if hitMRVL50 == -1
-    alert("BUY MRVL - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibMRVL50, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_50), alert.freq_all)
+    alert("BUY MRVL - Fib 50.0% Recovery Confirmed ≥ " + str.tostring(fibMRVL50, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_50), alert.freq_all)
 if hitMRVL618 == 1
-    alert("BUY MRVL - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibMRVL618, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_618), alert.freq_all)
+    alert("BUY MRVL - Fib 61.8% Pullback ≤ " + str.tostring(fibMRVL618, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_618), alert.freq_all)
 if hitMRVL618 == -1
-    alert("BUY MRVL - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibMRVL618, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_618), alert.freq_all)
+    alert("BUY MRVL - Fib 61.8% Recovery Confirmed ≥ " + str.tostring(fibMRVL618, "#.##") + " | Price: " + str.tostring(priceMRVL, "#.##") + " | BUY Qty: " + str.tostring(qtyMRVL_618), alert.freq_all)
 
 // ========== ALERTS FOR MSTR ==========
 if hitMSTR382 == 1
-    alert("BUY MSTR - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibMSTR382, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_382), alert.freq_all)
+    alert("BUY MSTR - Fib 38.2% Pullback ≤ " + str.tostring(fibMSTR382, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_382), alert.freq_all)
 if hitMSTR382 == -1
-    alert("BUY MSTR - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibMSTR382, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_382), alert.freq_all)
+    alert("BUY MSTR - Fib 38.2% Recovery Confirmed ≥ " + str.tostring(fibMSTR382, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_382), alert.freq_all)
 if hitMSTR50 == 1
-    alert("BUY MSTR - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibMSTR50, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_50), alert.freq_all)
+    alert("BUY MSTR - Fib 50.0% Pullback ≤ " + str.tostring(fibMSTR50, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_50), alert.freq_all)
 if hitMSTR50 == -1
-    alert("BUY MSTR - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibMSTR50, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_50), alert.freq_all)
+    alert("BUY MSTR - Fib 50.0% Recovery Confirmed ≥ " + str.tostring(fibMSTR50, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_50), alert.freq_all)
 if hitMSTR618 == 1
-    alert("BUY MSTR - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibMSTR618, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_618), alert.freq_all)
+    alert("BUY MSTR - Fib 61.8% Pullback ≤ " + str.tostring(fibMSTR618, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_618), alert.freq_all)
 if hitMSTR618 == -1
-    alert("BUY MSTR - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibMSTR618, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_618), alert.freq_all)
+    alert("BUY MSTR - Fib 61.8% Recovery Confirmed ≥ " + str.tostring(fibMSTR618, "#.##") + " | Price: " + str.tostring(priceMSTR, "#.##") + " | BUY Qty: " + str.tostring(qtyMSTR_618), alert.freq_all)
 
 // ========== ALERTS FOR MU ==========
 if hitMU382 == 1
-    alert("BUY MU - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibMU382, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_382), alert.freq_all)
+    alert("BUY MU - Fib 38.2% Pullback ≤ " + str.tostring(fibMU382, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_382), alert.freq_all)
 if hitMU382 == -1
-    alert("BUY MU - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibMU382, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_382), alert.freq_all)
+    alert("BUY MU - Fib 38.2% Recovery Confirmed ≥ " + str.tostring(fibMU382, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_382), alert.freq_all)
 if hitMU50 == 1
-    alert("BUY MU - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibMU50, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_50), alert.freq_all)
+    alert("BUY MU - Fib 50.0% Pullback ≤ " + str.tostring(fibMU50, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_50), alert.freq_all)
 if hitMU50 == -1
-    alert("BUY MU - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibMU50, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_50), alert.freq_all)
+    alert("BUY MU - Fib 50.0% Recovery Confirmed ≥ " + str.tostring(fibMU50, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_50), alert.freq_all)
 if hitMU618 == 1
-    alert("BUY MU - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibMU618, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_618), alert.freq_all)
+    alert("BUY MU - Fib 61.8% Pullback ≤ " + str.tostring(fibMU618, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_618), alert.freq_all)
 if hitMU618 == -1
-    alert("BUY MU - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibMU618, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_618), alert.freq_all)
+    alert("BUY MU - Fib 61.8% Recovery Confirmed ≥ " + str.tostring(fibMU618, "#.##") + " | Price: " + str.tostring(priceMU, "#.##") + " | BUY Qty: " + str.tostring(qtyMU_618), alert.freq_all)
 
 // ========== ALERTS FOR NVDA ==========
 if hitNVDA382 == 1
-    alert("BUY NVDA - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibNVDA382, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_382), alert.freq_all)
+    alert("BUY NVDA - Fib 38.2% Pullback ≤ " + str.tostring(fibNVDA382, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_382), alert.freq_all)
 if hitNVDA382 == -1
-    alert("BUY NVDA - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibNVDA382, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_382), alert.freq_all)
+    alert("BUY NVDA - Fib 38.2% Recovery Confirmed ≥ " + str.tostring(fibNVDA382, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_382), alert.freq_all)
 if hitNVDA50 == 1
-    alert("BUY NVDA - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibNVDA50, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_50), alert.freq_all)
+    alert("BUY NVDA - Fib 50.0% Pullback ≤ " + str.tostring(fibNVDA50, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_50), alert.freq_all)
 if hitNVDA50 == -1
-    alert("BUY NVDA - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibNVDA50, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_50), alert.freq_all)
+    alert("BUY NVDA - Fib 50.0% Recovery Confirmed ≥ " + str.tostring(fibNVDA50, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_50), alert.freq_all)
 if hitNVDA618 == 1
-    alert("BUY NVDA - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibNVDA618, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_618), alert.freq_all)
+    alert("BUY NVDA - Fib 61.8% Pullback ≤ " + str.tostring(fibNVDA618, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_618), alert.freq_all)
 if hitNVDA618 == -1
-    alert("BUY NVDA - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibNVDA618, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_618), alert.freq_all)
+    alert("BUY NVDA - Fib 61.8% Recovery Confirmed ≥ " + str.tostring(fibNVDA618, "#.##") + " | Price: " + str.tostring(priceNVDA, "#.##") + " | BUY Qty: " + str.tostring(qtyNVDA_618), alert.freq_all)
 
 // ========== ALERTS FOR PLTR ==========
 if hitPLTR382 == 1
-    alert("BUY PLTR - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibPLTR382, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_382), alert.freq_all)
+    alert("BUY PLTR - Fib 38.2% Pullback ≤ " + str.tostring(fibPLTR382, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_382), alert.freq_all)
 if hitPLTR382 == -1
-    alert("BUY PLTR - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibPLTR382, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_382), alert.freq_all)
+    alert("BUY PLTR - Fib 38.2% Recovery Confirmed ≥ " + str.tostring(fibPLTR382, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_382), alert.freq_all)
 if hitPLTR50 == 1
-    alert("BUY PLTR - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibPLTR50, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_50), alert.freq_all)
+    alert("BUY PLTR - Fib 50.0% Pullback ≤ " + str.tostring(fibPLTR50, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_50), alert.freq_all)
 if hitPLTR50 == -1
-    alert("BUY PLTR - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibPLTR50, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_50), alert.freq_all)
+    alert("BUY PLTR - Fib 50.0% Recovery Confirmed ≥ " + str.tostring(fibPLTR50, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_50), alert.freq_all)
 if hitPLTR618 == 1
-    alert("BUY PLTR - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibPLTR618, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_618), alert.freq_all)
+    alert("BUY PLTR - Fib 61.8% Pullback ≤ " + str.tostring(fibPLTR618, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_618), alert.freq_all)
 if hitPLTR618 == -1
-    alert("BUY PLTR - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibPLTR618, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_618), alert.freq_all)
+    alert("BUY PLTR - Fib 61.8% Recovery Confirmed ≥ " + str.tostring(fibPLTR618, "#.##") + " | Price: " + str.tostring(pricePLTR, "#.##") + " | BUY Qty: " + str.tostring(qtyPLTR_618), alert.freq_all)
 
 // ========== ALERTS FOR TSLA ==========
 if hitTSLA382 == 1
-    alert("BUY TSLA - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibTSLA382, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_382), alert.freq_all)
+    alert("BUY TSLA - Fib 38.2% Pullback ≤ " + str.tostring(fibTSLA382, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_382), alert.freq_all)
 if hitTSLA382 == -1
-    alert("BUY TSLA - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibTSLA382, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_382), alert.freq_all)
+    alert("BUY TSLA - Fib 38.2% Recovery Confirmed ≥ " + str.tostring(fibTSLA382, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_382), alert.freq_all)
 if hitTSLA50 == 1
-    alert("BUY TSLA - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibTSLA50, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_50), alert.freq_all)
+    alert("BUY TSLA - Fib 50.0% Pullback ≤ " + str.tostring(fibTSLA50, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_50), alert.freq_all)
 if hitTSLA50 == -1
-    alert("BUY TSLA - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibTSLA50, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_50), alert.freq_all)
+    alert("BUY TSLA - Fib 50.0% Recovery Confirmed ≥ " + str.tostring(fibTSLA50, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_50), alert.freq_all)
 if hitTSLA618 == 1
-    alert("BUY TSLA - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibTSLA618, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_618), alert.freq_all)
+    alert("BUY TSLA - Fib 61.8% Pullback ≤ " + str.tostring(fibTSLA618, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_618), alert.freq_all)
 if hitTSLA618 == -1
-    alert("BUY TSLA - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibTSLA618, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_618), alert.freq_all)
+    alert("BUY TSLA - Fib 61.8% Recovery Confirmed ≥ " + str.tostring(fibTSLA618, "#.##") + " | Price: " + str.tostring(priceTSLA, "#.##") + " | BUY Qty: " + str.tostring(qtyTSLA_618), alert.freq_all)
 
 // ========== ALERTS FOR TSM ==========
 if hitTSM382 == 1
-    alert("BUY TSM - Fib 38.2% Cross DOWN ≤ " + str.tostring(fibTSM382, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_382), alert.freq_all)
+    alert("BUY TSM - Fib 38.2% Pullback ≤ " + str.tostring(fibTSM382, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_382), alert.freq_all)
 if hitTSM382 == -1
-    alert("BUY TSM - Fib 38.2% Cross UP (Weak) ≥ " + str.tostring(fibTSM382, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_382), alert.freq_all)
+    alert("BUY TSM - Fib 38.2% Recovery Confirmed ≥ " + str.tostring(fibTSM382, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_382), alert.freq_all)
 if hitTSM50 == 1
-    alert("BUY TSM - Fib 50.0% Cross DOWN ≤ " + str.tostring(fibTSM50, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_50), alert.freq_all)
+    alert("BUY TSM - Fib 50.0% Pullback ≤ " + str.tostring(fibTSM50, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_50), alert.freq_all)
 if hitTSM50 == -1
-    alert("BUY TSM - Fib 50.0% Cross UP (Weak) ≥ " + str.tostring(fibTSM50, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_50), alert.freq_all)
+    alert("BUY TSM - Fib 50.0% Recovery Confirmed ≥ " + str.tostring(fibTSM50, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_50), alert.freq_all)
 if hitTSM618 == 1
-    alert("BUY TSM - Fib 61.8% Cross DOWN ≤ " + str.tostring(fibTSM618, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_618), alert.freq_all)
+    alert("BUY TSM - Fib 61.8% Pullback ≤ " + str.tostring(fibTSM618, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_618), alert.freq_all)
 if hitTSM618 == -1
-    alert("BUY TSM - Fib 61.8% Cross UP (Weak) ≥ " + str.tostring(fibTSM618, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_618), alert.freq_all)
+    alert("BUY TSM - Fib 61.8% Recovery Confirmed ≥ " + str.tostring(fibTSM618, "#.##") + " | Price: " + str.tostring(priceTSM, "#.##") + " | BUY Qty: " + str.tostring(qtyTSM_618), alert.freq_all)
