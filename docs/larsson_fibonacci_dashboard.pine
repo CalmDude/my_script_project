@@ -12,6 +12,7 @@ larssonV2 = input.int(29, title="Larsson V2 (Slow)", minval=1, group="Larsson Li
 lookbackPeriod = input.int(100, title="Lookback Period for Swing High/Low", minval=10, group="Fibonacci")
 manualSwingHigh = input.float(0.0, title="Manual Swing High (0 = Auto)", minval=0.0, group="Fibonacci")
 manualSwingLow = input.float(0.0, title="Manual Swing Low (0 = Auto)", minval=0.0, group="Fibonacci")
+overextensionThreshold = input.float(5.0, title="Overextension Threshold %", minval=0.0, maxval=20.0, step=0.5, group="Fibonacci")
 
 // Position Sizing - Pullback (Crossing DOWN from above - Strong)
 alloc382Pullback = input.int(20, title="38.2% Pullback Allocation %", minval=1, maxval=100, group="Position Sizing")
@@ -112,6 +113,13 @@ distToFib382 = ((fib382 - close) / close) * 100
 distToFib500 = ((fib500 - close) / close) * 100
 distToFib618 = ((fib618 - close) / close) * 100
 
+// Overextension detection (price significantly above all Fib levels)
+// Uses configurable threshold (default 5%) above the highest Fib level (38.2%)
+isOverextended = close > fib382 and distToFib382 < -overextensionThreshold
+
+// Distance to nearest Fib level (for entry opportunity assessment)
+distToNearestFib = close > fib382 ? distToFib382 : close > fib500 ? distToFib500 : distToFib618
+
 // ========== VOLUME ANALYSIS ==========
 volumeShortAvg = ta.sma(volume, volumeShortPeriod)
 volumeLongAvg = ta.sma(volume, volumeLongPeriod)
@@ -129,28 +137,39 @@ buyCondition = weeklyLarssonStatus == "GOLD" and
      priceAboveWeekly200 and 
      priceAboveDaily200
 
+// Modify signal if overextended
+buyConditionWithContext = buyCondition and not isOverextended
+waitForPullback = buyCondition and isOverextended
+
 // EXIT conditions
 exitPartial = weeklyLarssonStatus == "GRAY" and priceAboveDaily200 and priceAboveWeekly200  // Exit 50% (only if still above both 200 SMAs)
 exitFull = weeklyLarssonStatus == "BLUE" or not priceAboveWeekly200 or not priceAboveDaily200  // Exit 100% (any structure break)
 
-// Overall signal
+// Overall signal with overextension awareness
 signal = exitFull ? "EXIT 100%" : 
      exitPartial ? "EXIT 50%" : 
-     buyCondition ? "BUY" : 
+     waitForPullback ? "WAIT FOR PULLBACK" :
+     buyConditionWithContext ? "BUY" : 
      weeklyLarssonStatus == "GOLD" ? "WAIT" : "NO SETUP"
 
 signalColor = exitFull ? color.new(color.red, 0) : 
      exitPartial ? color.new(color.orange, 0) : 
-     buyCondition ? color.new(color.lime, 0) : 
+     waitForPullback ? color.new(color.yellow, 0) :
+     buyConditionWithContext ? color.new(color.lime, 0) : 
      color.new(color.yellow, 30)
 
 // Determine reason text for signal
 reasonText = ""
 reasonColor = color.white
 
-if buyCondition
+if buyConditionWithContext
     reasonText := "✓ Weekly GOLD + Above Weekly 200 + Above Daily 200"
     reasonColor := color.new(color.lime, 0)
+else if waitForPullback
+    // Calculate distance to 38.2% level for guidance
+    pullbackNeeded = math.abs(distToFib382)
+    reasonText := "⚠ OVEREXTENDED - Price " + str.tostring(pullbackNeeded, "#.#") + "% above entry zones. Wait for pullback to Fib levels"
+    reasonColor := color.new(color.yellow, 0)
 else if exitFull
     // Determine which condition(s) triggered exit
     if weeklyLarssonStatus == "BLUE" and (not priceAboveWeekly200 or not priceAboveDaily200)
