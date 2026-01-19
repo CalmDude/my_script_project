@@ -1,0 +1,478 @@
+//@version=5
+indicator("Stock Fibonacci Alerts v2 - Dashboard Aligned", overlay=false)
+
+// ========== INPUTS ==========
+// Larsson Line Settings
+larssonV1 = input.int(15, title="Larsson V1 (Fast)", minval=1, group="Larsson Line")
+larssonM1 = input.int(19, title="Larsson M1", minval=1, group="Larsson Line")
+larssonM2 = input.int(25, title="Larsson M2", minval=1, group="Larsson Line")
+larssonV2 = input.int(29, title="Larsson V2 (Slow)", minval=1, group="Larsson Line")
+
+// Fibonacci Settings
+lookbackPeriod = input.int(100, title="Lookback Period for Swing High/Low", minval=10, group="Fibonacci")
+proximityThreshold = input.float(2.0, title="Fibonacci Proximity % (for alerts)", minval=0.5, maxval=5.0, group="Fibonacci")
+
+// Position Sizing
+alloc382 = input.int(20, title="38.2% Allocation %", minval=1, maxval=100, group="Position Sizing")
+alloc500 = input.int(30, title="50.0% Allocation %", minval=1, maxval=100, group="Position Sizing")
+alloc618 = input.int(50, title="61.8% Allocation %", minval=1, maxval=100, group="Position Sizing")
+
+// Volume Settings
+volumeShortPeriod = input.int(3, title="Volume Short Period", minval=1, group="Volume")
+volumeLongPeriod = input.int(20, title="Volume Long Period", minval=1, group="Volume")
+
+// Alert Settings
+enableBuyAlerts = input.bool(true, title="Enable BUY Entry Alerts", group="Alerts")
+enableExitAlerts = input.bool(true, title="Enable EXIT Alerts", group="Alerts")
+
+// ========== STOCK INPUTS ==========
+dollarALAB = input.float(0.0, title="ALAB $ Amount", minval=0.0, group="Stock: ALAB")
+dollarAMD = input.float(0.0, title="AMD $ Amount", minval=0.0, group="Stock: AMD")
+dollarARM = input.float(0.0, title="ARM $ Amount", minval=0.0, group="Stock: ARM")
+dollarASML = input.float(0.0, title="ASML $ Amount", minval=0.0, group="Stock: ASML")
+dollarAVGO = input.float(0.0, title="AVGO $ Amount", minval=0.0, group="Stock: AVGO")
+dollarGOOG = input.float(0.0, title="GOOG $ Amount", minval=0.0, group="Stock: GOOG")
+dollarMRVL = input.float(0.0, title="MRVL $ Amount", minval=0.0, group="Stock: MRVL")
+dollarMSTR = input.float(0.0, title="MSTR $ Amount", minval=0.0, group="Stock: MSTR")
+dollarMU = input.float(0.0, title="MU $ Amount", minval=0.0, group="Stock: MU")
+dollarNVDA = input.float(0.0, title="NVDA $ Amount", minval=0.0, group="Stock: NVDA")
+dollarPLTR = input.float(0.0, title="PLTR $ Amount", minval=0.0, group="Stock: PLTR")
+dollarTSLA = input.float(0.0, title="TSLA $ Amount", minval=0.0, group="Stock: TSLA")
+dollarTSM = input.float(0.0, title="TSM $ Amount", minval=0.0, group="Stock: TSM")
+
+// ========== HELPER FUNCTIONS ==========
+
+// Get signals for a stock (aligned with dashboard logic)
+getSignals(ticker) =>
+    // Get daily close (forced to daily timeframe)
+    dailyClose = request.security(ticker, "D", close, lookahead=barmerge.lookahead_off)
+    
+    // Get weekly Larsson
+    [wV1, wM1, wM2, wV2] = request.security(ticker, "W", 
+        [ta.rma(close, larssonV1), ta.rma(close, larssonM1), 
+         ta.rma(close, larssonM2), ta.rma(close, larssonV2)], lookahead=barmerge.lookahead_off)
+    isWeeklyGold = wV1 > wV2 and wV1 > wM1 and wM1 > wM2 and wM2 > wV2
+    isWeeklyBlue = wV1 < wV2 and wV1 < wM1 and wM1 < wM2 and wM2 < wV2
+    weeklyStatus = isWeeklyGold ? "GOLD" : isWeeklyBlue ? "BLUE" : "GRAY"
+    
+    // Get 200 SMAs
+    sma200D = request.security(ticker, "D", ta.sma(close, 200), lookahead=barmerge.lookahead_off)
+    sma200W = request.security(ticker, "W", ta.sma(close, 200), lookahead=barmerge.lookahead_off)
+    aboveDaily200 = dailyClose > sma200D
+    aboveWeekly200 = na(sma200W) or dailyClose > sma200W
+    
+    // Calculate distances
+    distD200 = ((dailyClose - sma200D) / sma200D) * 100
+    distW200 = na(sma200W) ? 0.0 : ((dailyClose - sma200W) / sma200W) * 100
+    
+    // Volume (informational)
+    volShort = request.security(ticker, "D", ta.sma(volume, volumeShortPeriod), lookahead=barmerge.lookahead_off)
+    volLong = request.security(ticker, "D", ta.sma(volume, volumeLongPeriod), lookahead=barmerge.lookahead_off)
+    volStatus = volShort < volLong ? "Declining" : volShort > volLong ? "Rising" : "Neutral"
+    
+    // Signal logic (aligned with dashboard)
+    buySignal = weeklyStatus == "GOLD" and aboveWeekly200 and aboveDaily200
+    exit50Signal = weeklyStatus == "GRAY" and aboveDaily200 and aboveWeekly200
+    exit100Signal = weeklyStatus == "BLUE" or not aboveWeekly200 or not aboveDaily200
+    
+    // Determine exit reason
+    exitReason = weeklyStatus == "BLUE" ? "Weekly BLUE" : 
+                 not aboveWeekly200 and not aboveDaily200 ? "Both 200 SMAs broken" :
+                 not aboveWeekly200 ? "Weekly 200 SMA broken" : "Daily 200 SMA broken"
+    
+    [dailyClose, buySignal, exit50Signal, exit100Signal, weeklyStatus, 
+     distD200, distW200, volStatus, exitReason]
+
+// Calculate Fibonacci levels and proximity
+fibCheck(ticker, dollarAmount) =>
+    // Get swing high/low from daily timeframe
+    swingHigh = request.security(ticker, "D", ta.highest(high, lookbackPeriod), lookahead=barmerge.lookahead_off)
+    swingLow = request.security(ticker, "D", ta.lowest(low, lookbackPeriod), lookahead=barmerge.lookahead_off)
+    
+    // Calculate Fibonacci levels
+    priceRange = swingHigh - swingLow
+    fib382 = swingHigh - (priceRange * 0.382)
+    fib500 = swingHigh - (priceRange * 0.500)
+    fib618 = swingHigh - (priceRange * 0.618)
+    
+    // Get current daily close price
+    currentPrice = request.security(ticker, "D", close, lookahead=barmerge.lookahead_off)
+    
+    // Proximity detection (within threshold % of level)
+    threshold = proximityThreshold / 100
+    atFib382 = math.abs(currentPrice - fib382) / fib382 <= threshold
+    atFib500 = math.abs(currentPrice - fib500) / fib500 <= threshold
+    atFib618 = math.abs(currentPrice - fib618) / fib618 <= threshold
+    
+    // Calculate share quantities
+    qty382 = dollarAmount > 0 and currentPrice > 0 ? math.floor((dollarAmount * alloc382 / 100) / currentPrice) : 0
+    qty500 = dollarAmount > 0 and currentPrice > 0 ? math.floor((dollarAmount * alloc500 / 100) / currentPrice) : 0
+    qty618 = dollarAmount > 0 and currentPrice > 0 ? math.floor((dollarAmount * alloc618 / 100) / currentPrice) : 0
+    
+    [atFib382, atFib500, atFib618, fib382, fib500, fib618, qty382, qty500, qty618, currentPrice]
+
+// Helper function to build BUY alert message (avoids line length issues)
+buildBuyAlert(ticker, fibLevel, fibPrice, currentPrice, qty, allocPct, allocDollar, distW200, distD200, volStatus) =>
+    msg = "BUY SIGNAL - " + ticker + " at " + fibLevel + "% Fib ($" + str.tostring(fibPrice, "#.##") + ")\n"
+    msg := msg + "Price: $" + str.tostring(currentPrice, "#.##") + " | Qty: " + str.tostring(qty)
+    msg := msg + " (" + str.tostring(allocPct) + "% = $" + str.tostring(allocDollar, "#") + ")\n"
+    msg := msg + "Weekly GOLD + W:200 (+" + str.tostring(distW200, "#.#") + "%)"
+    msg := msg + " + D:200 (+" + str.tostring(distD200, "#.#") + "%)\n"
+    msg := msg + "Volume: " + volStatus + "\n\nNote: Quantities based on initial allocation for guidance only"
+    msg
+
+// ========== GET SIGNALS FOR ALL STOCKS ==========
+[priceALAB, buyALAB, exit50ALAB, exit100ALAB, weeklyALAB, distD200ALAB, distW200ALAB, volALAB, exitReasonALAB] = getSignals("NASDAQ:ALAB")
+[atFib382ALAB, atFib500ALAB, atFib618ALAB, fib382ALAB, fib500ALAB, fib618ALAB, qty382ALAB, qty500ALAB, qty618ALAB, _] = fibCheck("NASDAQ:ALAB", dollarALAB)
+
+[priceAMD, buyAMD, exit50AMD, exit100AMD, weeklyAMD, distD200AMD, distW200AMD, volAMD, exitReasonAMD] = getSignals("NASDAQ:AMD")
+[atFib382AMD, atFib500AMD, atFib618AMD, fib382AMD, fib500AMD, fib618AMD, qty382AMD, qty500AMD, qty618AMD, _] = fibCheck("NASDAQ:AMD", dollarAMD)
+
+[priceARM, buyARM, exit50ARM, exit100ARM, weeklyARM, distD200ARM, distW200ARM, volARM, exitReasonARM] = getSignals("NASDAQ:ARM")
+[atFib382ARM, atFib500ARM, atFib618ARM, fib382ARM, fib500ARM, fib618ARM, qty382ARM, qty500ARM, qty618ARM, _] = fibCheck("NASDAQ:ARM", dollarARM)
+
+[priceASML, buyASML, exit50ASML, exit100ASML, weeklyASML, distD200ASML, distW200ASML, volASML, exitReasonASML] = getSignals("NASDAQ:ASML")
+[atFib382ASML, atFib500ASML, atFib618ASML, fib382ASML, fib500ASML, fib618ASML, qty382ASML, qty500ASML, qty618ASML, _] = fibCheck("NASDAQ:ASML", dollarASML)
+
+[priceAVGO, buyAVGO, exit50AVGO, exit100AVGO, weeklyAVGO, distD200AVGO, distW200AVGO, volAVGO, exitReasonAVGO] = getSignals("NASDAQ:AVGO")
+[atFib382AVGO, atFib500AVGO, atFib618AVGO, fib382AVGO, fib500AVGO, fib618AVGO, qty382AVGO, qty500AVGO, qty618AVGO, _] = fibCheck("NASDAQ:AVGO", dollarAVGO)
+
+[priceGOOG, buyGOOG, exit50GOOG, exit100GOOG, weeklyGOOG, distD200GOOG, distW200GOOG, volGOOG, exitReasonGOOG] = getSignals("NASDAQ:GOOG")
+[atFib382GOOG, atFib500GOOG, atFib618GOOG, fib382GOOG, fib500GOOG, fib618GOOG, qty382GOOG, qty500GOOG, qty618GOOG, _] = fibCheck("NASDAQ:GOOG", dollarGOOG)
+
+[priceMRVL, buyMRVL, exit50MRVL, exit100MRVL, weeklyMRVL, distD200MRVL, distW200MRVL, volMRVL, exitReasonMRVL] = getSignals("NASDAQ:MRVL")
+[atFib382MRVL, atFib500MRVL, atFib618MRVL, fib382MRVL, fib500MRVL, fib618MRVL, qty382MRVL, qty500MRVL, qty618MRVL, _] = fibCheck("NASDAQ:MRVL", dollarMRVL)
+
+[priceMSTR, buyMSTR, exit50MSTR, exit100MSTR, weeklyMSTR, distD200MSTR, distW200MSTR, volMSTR, exitReasonMSTR] = getSignals("NASDAQ:MSTR")
+[atFib382MSTR, atFib500MSTR, atFib618MSTR, fib382MSTR, fib500MSTR, fib618MSTR, qty382MSTR, qty500MSTR, qty618MSTR, _] = fibCheck("NASDAQ:MSTR", dollarMSTR)
+
+[priceMU, buyMU, exit50MU, exit100MU, weeklyMU, distD200MU, distW200MU, volMU, exitReasonMU] = getSignals("NASDAQ:MU")
+[atFib382MU, atFib500MU, atFib618MU, fib382MU, fib500MU, fib618MU, qty382MU, qty500MU, qty618MU, _] = fibCheck("NASDAQ:MU", dollarMU)
+
+[priceNVDA, buyNVDA, exit50NVDA, exit100NVDA, weeklyNVDA, distD200NVDA, distW200NVDA, volNVDA, exitReasonNVDA] = getSignals("NASDAQ:NVDA")
+[atFib382NVDA, atFib500NVDA, atFib618NVDA, fib382NVDA, fib500NVDA, fib618NVDA, qty382NVDA, qty500NVDA, qty618NVDA, _] = fibCheck("NASDAQ:NVDA", dollarNVDA)
+
+[pricePLTR, buyPLTR, exit50PLTR, exit100PLTR, weeklyPLTR, distD200PLTR, distW200PLTR, volPLTR, exitReasonPLTR] = getSignals("NASDAQ:PLTR")
+[atFib382PLTR, atFib500PLTR, atFib618PLTR, fib382PLTR, fib500PLTR, fib618PLTR, qty382PLTR, qty500PLTR, qty618PLTR, _] = fibCheck("NASDAQ:PLTR", dollarPLTR)
+
+[priceTSLA, buyTSLA, exit50TSLA, exit100TSLA, weeklyTSLA, distD200TSLA, distW200TSLA, volTSLA, exitReasonTSLA] = getSignals("NASDAQ:TSLA")
+[atFib382TSLA, atFib500TSLA, atFib618TSLA, fib382TSLA, fib500TSLA, fib618TSLA, qty382TSLA, qty500TSLA, qty618TSLA, _] = fibCheck("NASDAQ:TSLA", dollarTSLA)
+
+[priceTSM, buyTSM, exit50TSM, exit100TSM, weeklyTSM, distD200TSM, distW200TSM, volTSM, exitReasonTSM] = getSignals("NYSE:TSM")
+[atFib382TSM, atFib500TSM, atFib618TSM, fib382TSM, fib500TSM, fib618TSM, qty382TSM, qty500TSM, qty618TSM, _] = fibCheck("NYSE:TSM", dollarTSM)
+
+// ========== STATE TRACKING ==========
+var bool prevBuyALAB382 = false, var bool prevBuyALAB500 = false, var bool prevBuyALAB618 = false
+var bool prevExit50ALAB = false, var bool prevExit100ALAB = false
+
+var bool prevBuyAMD382 = false, var bool prevBuyAMD500 = false, var bool prevBuyAMD618 = false
+var bool prevExit50AMD = false, var bool prevExit100AMD = false
+
+var bool prevBuyARM382 = false, var bool prevBuyARM500 = false, var bool prevBuyARM618 = false
+var bool prevExit50ARM = false, var bool prevExit100ARM = false
+
+var bool prevBuyASML382 = false, var bool prevBuyASML500 = false, var bool prevBuyASML618 = false
+var bool prevExit50ASML = false, var bool prevExit100ASML = false
+
+var bool prevBuyAVGO382 = false, var bool prevBuyAVGO500 = false, var bool prevBuyAVGO618 = false
+var bool prevExit50AVGO = false, var bool prevExit100AVGO = false
+
+var bool prevBuyGOOG382 = false, var bool prevBuyGOOG500 = false, var bool prevBuyGOOG618 = false
+var bool prevExit50GOOG = false, var bool prevExit100GOOG = false
+
+var bool prevBuyMRVL382 = false, var bool prevBuyMRVL500 = false, var bool prevBuyMRVL618 = false
+var bool prevExit50MRVL = false, var bool prevExit100MRVL = false
+
+var bool prevBuyMSTR382 = false, var bool prevBuyMSTR500 = false, var bool prevBuyMSTR618 = false
+var bool prevExit50MSTR = false, var bool prevExit100MSTR = false
+
+var bool prevBuyMU382 = false, var bool prevBuyMU500 = false, var bool prevBuyMU618 = false
+var bool prevExit50MU = false, var bool prevExit100MU = false
+
+var bool prevBuyNVDA382 = false, var bool prevBuyNVDA500 = false, var bool prevBuyNVDA618 = false
+var bool prevExit50NVDA = false, var bool prevExit100NVDA = false
+
+var bool prevBuyPLTR382 = false, var bool prevBuyPLTR500 = false, var bool prevBuyPLTR618 = false
+var bool prevExit50PLTR = false, var bool prevExit100PLTR = false
+
+var bool prevBuyTSLA382 = false, var bool prevBuyTSLA500 = false, var bool prevBuyTSLA618 = false
+var bool prevExit50TSLA = false, var bool prevExit100TSLA = false
+
+var bool prevBuyTSM382 = false, var bool prevBuyTSM500 = false, var bool prevBuyTSM618 = false
+var bool prevExit50TSM = false, var bool prevExit100TSM = false
+
+// ========== ALERTS - ALAB ==========
+if enableBuyAlerts and buyALAB and atFib382ALAB and not prevBuyALAB382
+    alert(buildBuyAlert("ALAB", "38.2", fib382ALAB, priceALAB, qty382ALAB, alloc382, dollarALAB * alloc382 / 100, distW200ALAB, distD200ALAB, volALAB), alert.freq_once_per_bar)
+prevBuyALAB382 := buyALAB and atFib382ALAB
+
+if enableBuyAlerts and buyALAB and atFib500ALAB and not prevBuyALAB500
+    alert(buildBuyAlert("ALAB", "50.0", fib500ALAB, priceALAB, qty500ALAB, alloc500, dollarALAB * alloc500 / 100, distW200ALAB, distD200ALAB, volALAB), alert.freq_once_per_bar)
+prevBuyALAB500 := buyALAB and atFib500ALAB
+
+if enableBuyAlerts and buyALAB and atFib618ALAB and not prevBuyALAB618
+    alert(buildBuyAlert("ALAB", "61.8", fib618ALAB, priceALAB, qty618ALAB, alloc618, dollarALAB * alloc618 / 100, distW200ALAB, distD200ALAB, volALAB), alert.freq_once_per_bar)
+prevBuyALAB618 := buyALAB and atFib618ALAB
+
+if enableExitAlerts and exit50ALAB and not prevExit50ALAB
+    alert("EXIT 50% - ALAB\nPrice: $" + str.tostring(priceALAB, "#.##") + "\nWeekly GRAY - Reduce position\nW:200 (+" + str.tostring(distW200ALAB, "#.#") + "%) | D:200 (+" + str.tostring(distD200ALAB, "#.#") + "%)", alert.freq_once_per_bar)
+prevExit50ALAB := exit50ALAB
+
+if enableExitAlerts and exit100ALAB and not prevExit100ALAB
+    alert("EXIT 100% - ALAB\nPrice: $" + str.tostring(priceALAB, "#.##") + "\n" + exitReasonALAB, alert.freq_once_per_bar)
+prevExit100ALAB := exit100ALAB
+
+// ========== ALERTS - AMD ==========
+if enableBuyAlerts and buyAMD and atFib382AMD and not prevBuyAMD382
+    alert(buildBuyAlert("AMD", "38.2", fib382AMD, priceAMD, qty382AMD, alloc382, dollarAMD * alloc382 / 100, distW200AMD, distD200AMD, volAMD), alert.freq_once_per_bar)
+prevBuyAMD382 := buyAMD and atFib382AMD
+
+if enableBuyAlerts and buyAMD and atFib500AMD and not prevBuyAMD500
+    alert(buildBuyAlert("AMD", "50.0", fib500AMD, priceAMD, qty500AMD, alloc500, dollarAMD * alloc500 / 100, distW200AMD, distD200AMD, volAMD), alert.freq_once_per_bar)
+prevBuyAMD500 := buyAMD and atFib500AMD
+
+if enableBuyAlerts and buyAMD and atFib618AMD and not prevBuyAMD618
+    alert(buildBuyAlert("AMD", "61.8", fib618AMD, priceAMD, qty618AMD, alloc618, dollarAMD * alloc618 / 100, distW200AMD, distD200AMD, volAMD), alert.freq_once_per_bar)
+prevBuyAMD618 := buyAMD and atFib618AMD
+
+if enableExitAlerts and exit50AMD and not prevExit50AMD
+    alert("EXIT 50% - AMD\nPrice: $" + str.tostring(priceAMD, "#.##") + "\nWeekly GRAY - Reduce position\nW:200 (+" + str.tostring(distW200AMD, "#.#") + "%) | D:200 (+" + str.tostring(distD200AMD, "#.#") + "%)", alert.freq_once_per_bar)
+prevExit50AMD := exit50AMD
+
+if enableExitAlerts and exit100AMD and not prevExit100AMD
+    alert("EXIT 100% - AMD\nPrice: $" + str.tostring(priceAMD, "#.##") + "\n" + exitReasonAMD, alert.freq_once_per_bar)
+prevExit100AMD := exit100AMD
+
+// ========== ALERTS - ARM ==========
+if enableBuyAlerts and buyARM and atFib382ARM and not prevBuyARM382
+    alert(buildBuyAlert("ARM", "38.2", fib382ARM, priceARM, qty382ARM, alloc382, dollarARM * alloc382 / 100, distW200ARM, distD200ARM, volARM), alert.freq_once_per_bar)
+prevBuyARM382 := buyARM and atFib382ARM
+
+if enableBuyAlerts and buyARM and atFib500ARM and not prevBuyARM500
+    alert(buildBuyAlert("ARM", "50.0", fib500ARM, priceARM, qty500ARM, alloc500, dollarARM * alloc500 / 100, distW200ARM, distD200ARM, volARM), alert.freq_once_per_bar)
+prevBuyARM500 := buyARM and atFib500ARM
+
+if enableBuyAlerts and buyARM and atFib618ARM and not prevBuyARM618
+    alert(buildBuyAlert("ARM", "61.8", fib618ARM, priceARM, qty618ARM, alloc618, dollarARM * alloc618 / 100, distW200ARM, distD200ARM, volARM), alert.freq_once_per_bar)
+prevBuyARM618 := buyARM and atFib618ARM
+
+if enableExitAlerts and exit50ARM and not prevExit50ARM
+    alert("EXIT 50% - ARM\nPrice: $" + str.tostring(priceARM, "#.##") + "\nWeekly GRAY - Reduce position\nW:200 (+" + str.tostring(distW200ARM, "#.#") + "%) | D:200 (+" + str.tostring(distD200ARM, "#.#") + "%)", alert.freq_once_per_bar)
+prevExit50ARM := exit50ARM
+
+if enableExitAlerts and exit100ARM and not prevExit100ARM
+    alert("EXIT 100% - ARM\nPrice: $" + str.tostring(priceARM, "#.##") + "\n" + exitReasonARM, alert.freq_once_per_bar)
+prevExit100ARM := exit100ARM
+
+// ========== ALERTS - ASML ==========
+if enableBuyAlerts and buyASML and atFib382ASML and not prevBuyASML382
+    alert(buildBuyAlert("ASML", "38.2", fib382ASML, priceASML, qty382ASML, alloc382, dollarASML * alloc382 / 100, distW200ASML, distD200ASML, volASML), alert.freq_once_per_bar)
+prevBuyASML382 := buyASML and atFib382ASML
+
+if enableBuyAlerts and buyASML and atFib500ASML and not prevBuyASML500
+    alert(buildBuyAlert("ASML", "50.0", fib500ASML, priceASML, qty500ASML, alloc500, dollarASML * alloc500 / 100, distW200ASML, distD200ASML, volASML), alert.freq_once_per_bar)
+prevBuyASML500 := buyASML and atFib500ASML
+
+if enableBuyAlerts and buyASML and atFib618ASML and not prevBuyASML618
+    alert(buildBuyAlert("ASML", "61.8", fib618ASML, priceASML, qty618ASML, alloc618, dollarASML * alloc618 / 100, distW200ASML, distD200ASML, volASML), alert.freq_once_per_bar)
+prevBuyASML618 := buyASML and atFib618ASML
+
+if enableExitAlerts and exit50ASML and not prevExit50ASML
+    alert("EXIT 50% - ASML\nPrice: $" + str.tostring(priceASML, "#.##") + "\nWeekly GRAY - Reduce position\nW:200 (+" + str.tostring(distW200ASML, "#.#") + "%) | D:200 (+" + str.tostring(distD200ASML, "#.#") + "%)", alert.freq_once_per_bar)
+prevExit50ASML := exit50ASML
+
+if enableExitAlerts and exit100ASML and not prevExit100ASML
+    alert("EXIT 100% - ASML\nPrice: $" + str.tostring(priceASML, "#.##") + "\n" + exitReasonASML, alert.freq_once_per_bar)
+prevExit100ASML := exit100ASML
+
+// ========== ALERTS - AVGO ==========
+if enableBuyAlerts and buyAVGO and atFib382AVGO and not prevBuyAVGO382
+    alert(buildBuyAlert("AVGO", "38.2", fib382AVGO, priceAVGO, qty382AVGO, alloc382, dollarAVGO * alloc382 / 100, distW200AVGO, distD200AVGO, volAVGO), alert.freq_once_per_bar)
+prevBuyAVGO382 := buyAVGO and atFib382AVGO
+
+if enableBuyAlerts and buyAVGO and atFib500AVGO and not prevBuyAVGO500
+    alert(buildBuyAlert("AVGO", "50.0", fib500AVGO, priceAVGO, qty500AVGO, alloc500, dollarAVGO * alloc500 / 100, distW200AVGO, distD200AVGO, volAVGO), alert.freq_once_per_bar)
+prevBuyAVGO500 := buyAVGO and atFib500AVGO
+
+if enableBuyAlerts and buyAVGO and atFib618AVGO and not prevBuyAVGO618
+    alert(buildBuyAlert("AVGO", "61.8", fib618AVGO, priceAVGO, qty618AVGO, alloc618, dollarAVGO * alloc618 / 100, distW200AVGO, distD200AVGO, volAVGO), alert.freq_once_per_bar)
+prevBuyAVGO618 := buyAVGO and atFib618AVGO
+
+if enableExitAlerts and exit50AVGO and not prevExit50AVGO
+    alert("EXIT 50% - AVGO\nPrice: $" + str.tostring(priceAVGO, "#.##") + "\nWeekly GRAY - Reduce position\nW:200 (+" + str.tostring(distW200AVGO, "#.#") + "%) | D:200 (+" + str.tostring(distD200AVGO, "#.#") + "%)", alert.freq_once_per_bar)
+prevExit50AVGO := exit50AVGO
+
+if enableExitAlerts and exit100AVGO and not prevExit100AVGO
+    alert("EXIT 100% - AVGO\nPrice: $" + str.tostring(priceAVGO, "#.##") + "\n" + exitReasonAVGO, alert.freq_once_per_bar)
+prevExit100AVGO := exit100AVGO
+
+// ========== ALERTS - GOOG ==========
+if enableBuyAlerts and buyGOOG and atFib382GOOG and not prevBuyGOOG382
+    alert(buildBuyAlert("GOOG", "38.2", fib382GOOG, priceGOOG, qty382GOOG, alloc382, dollarGOOG * alloc382 / 100, distW200GOOG, distD200GOOG, volGOOG), alert.freq_once_per_bar)
+prevBuyGOOG382 := buyGOOG and atFib382GOOG
+
+if enableBuyAlerts and buyGOOG and atFib500GOOG and not prevBuyGOOG500
+    alert(buildBuyAlert("GOOG", "50.0", fib500GOOG, priceGOOG, qty500GOOG, alloc500, dollarGOOG * alloc500 / 100, distW200GOOG, distD200GOOG, volGOOG), alert.freq_once_per_bar)
+prevBuyGOOG500 := buyGOOG and atFib500GOOG
+
+if enableBuyAlerts and buyGOOG and atFib618GOOG and not prevBuyGOOG618
+    alert(buildBuyAlert("GOOG", "61.8", fib618GOOG, priceGOOG, qty618GOOG, alloc618, dollarGOOG * alloc618 / 100, distW200GOOG, distD200GOOG, volGOOG), alert.freq_once_per_bar)
+prevBuyGOOG618 := buyGOOG and atFib618GOOG
+
+if enableExitAlerts and exit50GOOG and not prevExit50GOOG
+    alert("EXIT 50% - GOOG\nPrice: $" + str.tostring(priceGOOG, "#.##") + "\nWeekly GRAY - Reduce position\nW:200 (+" + str.tostring(distW200GOOG, "#.#") + "%) | D:200 (+" + str.tostring(distD200GOOG, "#.#") + "%)", alert.freq_once_per_bar)
+prevExit50GOOG := exit50GOOG
+
+if enableExitAlerts and exit100GOOG and not prevExit100GOOG
+    alert("EXIT 100% - GOOG\nPrice: $" + str.tostring(priceGOOG, "#.##") + "\n" + exitReasonGOOG, alert.freq_once_per_bar)
+prevExit100GOOG := exit100GOOG
+
+// ========== ALERTS - MRVL ==========
+if enableBuyAlerts and buyMRVL and atFib382MRVL and not prevBuyMRVL382
+    alert(buildBuyAlert("MRVL", "38.2", fib382MRVL, priceMRVL, qty382MRVL, alloc382, dollarMRVL * alloc382 / 100, distW200MRVL, distD200MRVL, volMRVL), alert.freq_once_per_bar)
+prevBuyMRVL382 := buyMRVL and atFib382MRVL
+
+if enableBuyAlerts and buyMRVL and atFib500MRVL and not prevBuyMRVL500
+    alert(buildBuyAlert("MRVL", "50.0", fib500MRVL, priceMRVL, qty500MRVL, alloc500, dollarMRVL * alloc500 / 100, distW200MRVL, distD200MRVL, volMRVL), alert.freq_once_per_bar)
+prevBuyMRVL500 := buyMRVL and atFib500MRVL
+
+if enableBuyAlerts and buyMRVL and atFib618MRVL and not prevBuyMRVL618
+    alert(buildBuyAlert("MRVL", "61.8", fib618MRVL, priceMRVL, qty618MRVL, alloc618, dollarMRVL * alloc618 / 100, distW200MRVL, distD200MRVL, volMRVL), alert.freq_once_per_bar)
+prevBuyMRVL618 := buyMRVL and atFib618MRVL
+
+if enableExitAlerts and exit50MRVL and not prevExit50MRVL
+    alert("EXIT 50% - MRVL\nPrice: $" + str.tostring(priceMRVL, "#.##") + "\nWeekly GRAY - Reduce position\nW:200 (+" + str.tostring(distW200MRVL, "#.#") + "%) | D:200 (+" + str.tostring(distD200MRVL, "#.#") + "%)", alert.freq_once_per_bar)
+prevExit50MRVL := exit50MRVL
+
+if enableExitAlerts and exit100MRVL and not prevExit100MRVL
+    alert("EXIT 100% - MRVL\nPrice: $" + str.tostring(priceMRVL, "#.##") + "\n" + exitReasonMRVL, alert.freq_once_per_bar)
+prevExit100MRVL := exit100MRVL
+
+// ========== ALERTS - MSTR ==========
+if enableBuyAlerts and buyMSTR and atFib382MSTR and not prevBuyMSTR382
+    alert(buildBuyAlert("MSTR", "38.2", fib382MSTR, priceMSTR, qty382MSTR, alloc382, dollarMSTR * alloc382 / 100, distW200MSTR, distD200MSTR, volMSTR), alert.freq_once_per_bar)
+prevBuyMSTR382 := buyMSTR and atFib382MSTR
+
+if enableBuyAlerts and buyMSTR and atFib500MSTR and not prevBuyMSTR500
+    alert(buildBuyAlert("MSTR", "50.0", fib500MSTR, priceMSTR, qty500MSTR, alloc500, dollarMSTR * alloc500 / 100, distW200MSTR, distD200MSTR, volMSTR), alert.freq_once_per_bar)
+prevBuyMSTR500 := buyMSTR and atFib500MSTR
+
+if enableBuyAlerts and buyMSTR and atFib618MSTR and not prevBuyMSTR618
+    alert(buildBuyAlert("MSTR", "61.8", fib618MSTR, priceMSTR, qty618MSTR, alloc618, dollarMSTR * alloc618 / 100, distW200MSTR, distD200MSTR, volMSTR), alert.freq_once_per_bar)
+prevBuyMSTR618 := buyMSTR and atFib618MSTR
+
+if enableExitAlerts and exit50MSTR and not prevExit50MSTR
+    alert("EXIT 50% - MSTR\nPrice: $" + str.tostring(priceMSTR, "#.##") + "\nWeekly GRAY - Reduce position\nW:200 (+" + str.tostring(distW200MSTR, "#.#") + "%) | D:200 (+" + str.tostring(distD200MSTR, "#.#") + "%)", alert.freq_once_per_bar)
+prevExit50MSTR := exit50MSTR
+
+if enableExitAlerts and exit100MSTR and not prevExit100MSTR
+    alert("EXIT 100% - MSTR\nPrice: $" + str.tostring(priceMSTR, "#.##") + "\n" + exitReasonMSTR, alert.freq_once_per_bar)
+prevExit100MSTR := exit100MSTR
+
+// ========== ALERTS - MU ==========
+if enableBuyAlerts and buyMU and atFib382MU and not prevBuyMU382
+    alert(buildBuyAlert("MU", "38.2", fib382MU, priceMU, qty382MU, alloc382, dollarMU * alloc382 / 100, distW200MU, distD200MU, volMU), alert.freq_once_per_bar)
+prevBuyMU382 := buyMU and atFib382MU
+
+if enableBuyAlerts and buyMU and atFib500MU and not prevBuyMU500
+    alert(buildBuyAlert("MU", "50.0", fib500MU, priceMU, qty500MU, alloc500, dollarMU * alloc500 / 100, distW200MU, distD200MU, volMU), alert.freq_once_per_bar)
+prevBuyMU500 := buyMU and atFib500MU
+
+if enableBuyAlerts and buyMU and atFib618MU and not prevBuyMU618
+    alert(buildBuyAlert("MU", "61.8", fib618MU, priceMU, qty618MU, alloc618, dollarMU * alloc618 / 100, distW200MU, distD200MU, volMU), alert.freq_once_per_bar)
+prevBuyMU618 := buyMU and atFib618MU
+
+if enableExitAlerts and exit50MU and not prevExit50MU
+    alert("EXIT 50% - MU\nPrice: $" + str.tostring(priceMU, "#.##") + "\nWeekly GRAY - Reduce position\nW:200 (+" + str.tostring(distW200MU, "#.#") + "%) | D:200 (+" + str.tostring(distD200MU, "#.#") + "%)", alert.freq_once_per_bar)
+prevExit50MU := exit50MU
+
+if enableExitAlerts and exit100MU and not prevExit100MU
+    alert("EXIT 100% - MU\nPrice: $" + str.tostring(priceMU, "#.##") + "\n" + exitReasonMU, alert.freq_once_per_bar)
+prevExit100MU := exit100MU
+
+// ========== ALERTS - NVDA ==========
+if enableBuyAlerts and buyNVDA and atFib382NVDA and not prevBuyNVDA382
+    alert(buildBuyAlert("NVDA", "38.2", fib382NVDA, priceNVDA, qty382NVDA, alloc382, dollarNVDA * alloc382 / 100, distW200NVDA, distD200NVDA, volNVDA), alert.freq_once_per_bar)
+prevBuyNVDA382 := buyNVDA and atFib382NVDA
+
+if enableBuyAlerts and buyNVDA and atFib500NVDA and not prevBuyNVDA500
+    alert(buildBuyAlert("NVDA", "50.0", fib500NVDA, priceNVDA, qty500NVDA, alloc500, dollarNVDA * alloc500 / 100, distW200NVDA, distD200NVDA, volNVDA), alert.freq_once_per_bar)
+prevBuyNVDA500 := buyNVDA and atFib500NVDA
+
+if enableBuyAlerts and buyNVDA and atFib618NVDA and not prevBuyNVDA618
+    alert(buildBuyAlert("NVDA", "61.8", fib618NVDA, priceNVDA, qty618NVDA, alloc618, dollarNVDA * alloc618 / 100, distW200NVDA, distD200NVDA, volNVDA), alert.freq_once_per_bar)
+prevBuyNVDA618 := buyNVDA and atFib618NVDA
+
+if enableExitAlerts and exit50NVDA and not prevExit50NVDA
+    alert("EXIT 50% - NVDA\nPrice: $" + str.tostring(priceNVDA, "#.##") + "\nWeekly GRAY - Reduce position\nW:200 (+" + str.tostring(distW200NVDA, "#.#") + "%) | D:200 (+" + str.tostring(distD200NVDA, "#.#") + "%)", alert.freq_once_per_bar)
+prevExit50NVDA := exit50NVDA
+
+if enableExitAlerts and exit100NVDA and not prevExit100NVDA
+    alert("EXIT 100% - NVDA\nPrice: $" + str.tostring(priceNVDA, "#.##") + "\n" + exitReasonNVDA, alert.freq_once_per_bar)
+prevExit100NVDA := exit100NVDA
+
+// ========== ALERTS - PLTR ==========
+if enableBuyAlerts and buyPLTR and atFib382PLTR and not prevBuyPLTR382
+    alert(buildBuyAlert("PLTR", "38.2", fib382PLTR, pricePLTR, qty382PLTR, alloc382, dollarPLTR * alloc382 / 100, distW200PLTR, distD200PLTR, volPLTR), alert.freq_once_per_bar)
+prevBuyPLTR382 := buyPLTR and atFib382PLTR
+
+if enableBuyAlerts and buyPLTR and atFib500PLTR and not prevBuyPLTR500
+    alert(buildBuyAlert("PLTR", "50.0", fib500PLTR, pricePLTR, qty500PLTR, alloc500, dollarPLTR * alloc500 / 100, distW200PLTR, distD200PLTR, volPLTR), alert.freq_once_per_bar)
+prevBuyPLTR500 := buyPLTR and atFib500PLTR
+
+if enableBuyAlerts and buyPLTR and atFib618PLTR and not prevBuyPLTR618
+    alert(buildBuyAlert("PLTR", "61.8", fib618PLTR, pricePLTR, qty618PLTR, alloc618, dollarPLTR * alloc618 / 100, distW200PLTR, distD200PLTR, volPLTR), alert.freq_once_per_bar)
+prevBuyPLTR618 := buyPLTR and atFib618PLTR
+
+if enableExitAlerts and exit50PLTR and not prevExit50PLTR
+    alert("EXIT 50% - PLTR\nPrice: $" + str.tostring(pricePLTR, "#.##") + "\nWeekly GRAY - Reduce position\nW:200 (+" + str.tostring(distW200PLTR, "#.#") + "%) | D:200 (+" + str.tostring(distD200PLTR, "#.#") + "%)", alert.freq_once_per_bar)
+prevExit50PLTR := exit50PLTR
+
+if enableExitAlerts and exit100PLTR and not prevExit100PLTR
+    alert("EXIT 100% - PLTR\nPrice: $" + str.tostring(pricePLTR, "#.##") + "\n" + exitReasonPLTR, alert.freq_once_per_bar)
+prevExit100PLTR := exit100PLTR
+
+// ========== ALERTS - TSLA ==========
+if enableBuyAlerts and buyTSLA and atFib382TSLA and not prevBuyTSLA382
+    alert(buildBuyAlert("TSLA", "38.2", fib382TSLA, priceTSLA, qty382TSLA, alloc382, dollarTSLA * alloc382 / 100, distW200TSLA, distD200TSLA, volTSLA), alert.freq_once_per_bar)
+prevBuyTSLA382 := buyTSLA and atFib382TSLA
+
+if enableBuyAlerts and buyTSLA and atFib500TSLA and not prevBuyTSLA500
+    alert(buildBuyAlert("TSLA", "50.0", fib500TSLA, priceTSLA, qty500TSLA, alloc500, dollarTSLA * alloc500 / 100, distW200TSLA, distD200TSLA, volTSLA), alert.freq_once_per_bar)
+prevBuyTSLA500 := buyTSLA and atFib500TSLA
+
+if enableBuyAlerts and buyTSLA and atFib618TSLA and not prevBuyTSLA618
+    alert(buildBuyAlert("TSLA", "61.8", fib618TSLA, priceTSLA, qty618TSLA, alloc618, dollarTSLA * alloc618 / 100, distW200TSLA, distD200TSLA, volTSLA), alert.freq_once_per_bar)
+prevBuyTSLA618 := buyTSLA and atFib618TSLA
+
+if enableExitAlerts and exit50TSLA and not prevExit50TSLA
+    alert("EXIT 50% - TSLA\nPrice: $" + str.tostring(priceTSLA, "#.##") + "\nWeekly GRAY - Reduce position\nW:200 (+" + str.tostring(distW200TSLA, "#.#") + "%) | D:200 (+" + str.tostring(distD200TSLA, "#.#") + "%)", alert.freq_once_per_bar)
+prevExit50TSLA := exit50TSLA
+
+if enableExitAlerts and exit100TSLA and not prevExit100TSLA
+    alert("EXIT 100% - TSLA\nPrice: $" + str.tostring(priceTSLA, "#.##") + "\n" + exitReasonTSLA, alert.freq_once_per_bar)
+prevExit100TSLA := exit100TSLA
+
+// ========== ALERTS - TSM ==========
+if enableBuyAlerts and buyTSM and atFib382TSM and not prevBuyTSM382
+    alert(buildBuyAlert("TSM", "38.2", fib382TSM, priceTSM, qty382TSM, alloc382, dollarTSM * alloc382 / 100, distW200TSM, distD200TSM, volTSM), alert.freq_once_per_bar)
+prevBuyTSM382 := buyTSM and atFib382TSM
+
+if enableBuyAlerts and buyTSM and atFib500TSM and not prevBuyTSM500
+    alert(buildBuyAlert("TSM", "50.0", fib500TSM, priceTSM, qty500TSM, alloc500, dollarTSM * alloc500 / 100, distW200TSM, distD200TSM, volTSM), alert.freq_once_per_bar)
+prevBuyTSM500 := buyTSM and atFib500TSM
+
+if enableBuyAlerts and buyTSM and atFib618TSM and not prevBuyTSM618
+    alert(buildBuyAlert("TSM", "61.8", fib618TSM, priceTSM, qty618TSM, alloc618, dollarTSM * alloc618 / 100, distW200TSM, distD200TSM, volTSM), alert.freq_once_per_bar)
+prevBuyTSM618 := buyTSM and atFib618TSM
+
+if enableExitAlerts and exit50TSM and not prevExit50TSM
+    alert("EXIT 50% - TSM\nPrice: $" + str.tostring(priceTSM, "#.##") + "\nWeekly GRAY - Reduce position\nW:200 (+" + str.tostring(distW200TSM, "#.#") + "%) | D:200 (+" + str.tostring(distD200TSM, "#.#") + "%)", alert.freq_once_per_bar)
+prevExit50TSM := exit50TSM
+
+if enableExitAlerts and exit100TSM and not prevExit100TSM
+    alert("EXIT 100% - TSM\nPrice: $" + str.tostring(priceTSM, "#.##") + "\n" + exitReasonTSM, alert.freq_once_per_bar)
+prevExit100TSM := exit100TSM
+
+// ========== DISPLAY ==========
+plot(0, title="Alerts Active", color=color.blue, display=display.none)

@@ -5,6 +5,18 @@ indicator("Stock Fibonacci Alerts", overlay=false, dynamic_requests=true)
 lookbackPeriod = input.int(100, title="Days to Lookback for Auto Swing Calculation", minval=1)
 useAutoSwing = input.bool(true, title="Auto-Calculate Swing High/Low from Lookback")
 recoveryConfirmationBuffer = input.float(1.5, title="Recovery Confirmation Buffer %", minval=0.5, maxval=5.0, tooltip="Price must be this % above Fib level for recovery entry")
+recoveryUpperBuffer = input.float(3.0, title="Recovery Upper Buffer %", minval=0.5, maxval=20.0, tooltip="Maximum % above Fib level for recovery entry (prevents late entries)")
+fibTolerance = input.float(2.0, title="Fib Level Tolerance %", minval=0.1, maxval=5.0, tooltip="Price must be within this % of Fib level")
+
+// ========== LARSSON LINE SETTINGS ==========
+larssonV1 = input.int(15, title="Larsson V1 (Fast)", minval=1, group="Larsson Line")
+larssonM1 = input.int(19, title="Larsson M1", minval=1, group="Larsson Line")
+larssonM2 = input.int(25, title="Larsson M2", minval=1, group="Larsson Line")
+larssonV2 = input.int(29, title="Larsson V2 (Slow)", minval=1, group="Larsson Line")
+
+// ========== VOLUME SETTINGS ==========
+volumeShortPeriod = input.int(3, title="Volume Short Period", minval=1, group="Volume")
+volumeLongPeriod = input.int(20, title="Volume Long Period", minval=1, group="Volume")
 
 // ========== STOCK 1: ALAB ==========
 symALAB = input.string("NASDAQ:ALAB", title="ALAB Symbol")
@@ -139,8 +151,29 @@ swingLowTSM = useAutoSwing ? autoLowTSM : (manualLowTSM > 0.0 ? manualLowTSM : a
 // ========== DISPLAY SETTINGS ==========
 showStatus = input.bool(false, title="Show Status Line")
 
+// ========== GLOBAL LARSSON, SMA, AND VOLUME CALCULATIONS ==========
+// These are calculated once for the current chart (not per-stock)
+// The alert script monitors 13 stocks but only triggers alerts when viewing each stock individually
+
+// Weekly Larsson Lines for current chart
+[weeklyV1, weeklyM1, weeklyM2, weeklyV2] = request.security(syminfo.tickerid, "W", [ta.rma(close, larssonV1), ta.rma(close, larssonM1), ta.rma(close, larssonM2), ta.rma(close, larssonV2)])
+isWeeklyBullish = weeklyV1 > weeklyV2 and weeklyV1 > weeklyM1 and weeklyM1 > weeklyM2 and weeklyM2 > weeklyV2
+weeklyLarssonGold = isWeeklyBullish
+
+// 200 SMAs for current chart
+sma200Daily = request.security(syminfo.tickerid, "D", ta.sma(close, 200))
+sma200Weekly = request.security(syminfo.tickerid, "W", ta.sma(close, 200))
+priceAboveDaily200 = close > sma200Daily
+priceAboveWeekly200 = na(sma200Weekly) or close > sma200Weekly
+
+// Volume for current chart
+volumeShortAvg = ta.sma(volume, volumeShortPeriod)
+volumeLongAvg = ta.sma(volume, volumeLongPeriod)
+volumeDeclining = volumeShortAvg < volumeLongAvg
+volumeRising = volumeShortAvg > volumeLongAvg
+
 // ========== FIBONACCI CALCULATION AND ALERT FUNCTION ==========
-fibCheck(sym, swingHigh, swingLow, dollarAmount) =>
+fibCheck(swingHigh, swingLow, dollarAmount) =>
     if swingHigh > 0.0 and swingLow > 0.0
         // Calculate Fibonacci levels based on swing points
         priceRange = swingHigh - swingLow
@@ -148,26 +181,68 @@ fibCheck(sym, swingHigh, swingLow, dollarAmount) =>
         fib50 = swingHigh - (priceRange * 0.5)
         fib618 = swingHigh - (priceRange * 0.618)
         
-        // Get current realtime price for instant intraday alerts (tick-by-tick)
-        currentPrice = request.security(sym, "", close)
-        prevPrice = request.security(sym, "", close[1])
+        // Use current chart's price (no request.security needed)
+        currentPrice = close
         
-        // Calculate recovery confirmation buffers (price must be +1.5% above level for recovery)
+        // Calculate spacing between levels to prevent overlapping zones
+        spacing382to500 = math.abs(fib50 - fib382) / fib382 * 100
+        spacing500to618 = math.abs(fib618 - fib50) / fib50 * 100
+        spacing618toHigh = math.abs(swingHigh - fib618) / fib618 * 100
+        
+        // Cap each recovery range to configured range OR half the spacing to next level
+        configuredRange = recoveryUpperBuffer - recoveryConfirmationBuffer
+        maxRecoveryRange382 = math.min(configuredRange, spacing382to500 / 2)
+        maxRecoveryRange500 = math.min(configuredRange, spacing500to618 / 2)
+        maxRecoveryRange618 = math.min(configuredRange, spacing618toHigh / 2)
+        
+        // Calculate recovery confirmation buffers with dynamic caps
         recoveryBuffer382 = fib382 * (1 + recoveryConfirmationBuffer / 100)
-        recoveryBuffer500 = fib50 * (1 + recoveryConfirmationBuffer / 100)
+        recoveryBuffer50 = fib50 * (1 + recoveryConfirmationBuffer / 100)
         recoveryBuffer618 = fib618 * (1 + recoveryConfirmationBuffer / 100)
+        
+        recoveryUpperBuffer382 = fib382 * (1 + recoveryConfirmationBuffer / 100 + maxRecoveryRange382 / 100)
+        recoveryUpperBuffer50 = fib50 * (1 + recoveryConfirmationBuffer / 100 + maxRecoveryRange500 / 100)
+        recoveryUpperBuffer618 = fib618 * (1 + recoveryConfirmationBuffer / 100 + maxRecoveryRange618 / 100)
+        
+        // Check proximity to Fibonacci levels (within tolerance)
+        tolerance = priceRange * (fibTolerance / 100)
+        atFib382 = math.abs(currentPrice - fib382) <= tolerance
+        atFib50 = math.abs(currentPrice - fib50) <= tolerance
+        atFib618 = math.abs(currentPrice - fib618) <= tolerance
+        atAnyFibLevel = atFib382 or atFib50 or atFib618
+        
+        // Determine recovery phase with upper bound
+        aboveFib618 = currentPrice > fib618
+        aboveFib500 = currentPrice > fib50
+        aboveFib382 = currentPrice > fib382
+        
+        lastCrossedLevel = aboveFib618 ? fib618 : aboveFib500 ? fib50 : aboveFib382 ? fib382 : 0.0
+        
+        // Distance above last crossed level in percent
+        distAboveLastCrossedPct = lastCrossedLevel > 0.0 ? ((currentPrice - lastCrossedLevel) / lastCrossedLevel) * 100 : na
+        
+        // Confirm recovery only when price is between confirmation buffer and upper buffer
+        confirmedAboveLastCrossed = lastCrossedLevel > 0.0 and distAboveLastCrossedPct >= recoveryConfirmationBuffer and distAboveLastCrossedPct <= recoveryUpperBuffer
+        inRecoveryPhase = confirmedAboveLastCrossed
+        
+        // Separate volume logic for pullback vs recovery
+        atPullbackLevel = atFib382 or atFib50 or atFib618
+        atRecoveryLevel = (currentPrice >= recoveryBuffer382 and currentPrice <= recoveryUpperBuffer382) or (currentPrice >= recoveryBuffer50 and currentPrice <= recoveryUpperBuffer50) or (currentPrice >= recoveryBuffer618 and currentPrice <= recoveryUpperBuffer618)
+        volumeConditionMet = atPullbackLevel ? volumeDeclining : ((atRecoveryLevel or inRecoveryPhase) and volumeRising)
         
         // Check if current price crosses below each Fibonacci level (PULLBACK - Strong buy signal)
         hitDown382 = ta.crossunder(currentPrice, fib382) ? 1 : 0
         hitDown50 = ta.crossunder(currentPrice, fib50) ? 1 : 0
         hitDown618 = ta.crossunder(currentPrice, fib618) ? 1 : 0
         
-        // Check if current price crosses above recovery buffer (RECOVERY - Confirmed buy signal)
-        // Only triggers when price crosses above the buffer level (+1.5% above Fib level)
-        // This prevents false signals when price just touches the Fib level from below
-        hitUp382 = ta.crossover(currentPrice, recoveryBuffer382) ? 1 : 0
-        hitUp50 = ta.crossover(currentPrice, recoveryBuffer500) ? 1 : 0
-        hitUp618 = ta.crossover(currentPrice, recoveryBuffer618) ? 1 : 0
+        // Check if current price crosses into recovery buffer range (RECOVERY - Confirmed buy signal)
+        // Only trigger when entering the valid recovery window (between confirmation and upper buffer)
+        hitUp382 = (ta.crossover(currentPrice, recoveryBuffer382) and currentPrice <= recoveryUpperBuffer382) ? 1 : 0
+        hitUp50 = (ta.crossover(currentPrice, recoveryBuffer50) and currentPrice <= recoveryUpperBuffer50) ? 1 : 0
+        hitUp618 = (ta.crossover(currentPrice, recoveryBuffer618) and currentPrice <= recoveryUpperBuffer618) ? 1 : 0
+        
+        // Apply comprehensive filtering: only trigger if ALL conditions met
+        allConditionsMet = weeklyLarssonGold and priceAboveWeekly200 and priceAboveDaily200 and volumeConditionMet
         
         // Calculate quantities for CROSSING DOWN (pullback) - 20%, 30%, 50% allocation
         qtyDown382 = fib382 > 0 ? math.floor((dollarAmount * 0.20) / fib382) : 0
@@ -179,10 +254,10 @@ fibCheck(sym, swingHigh, swingLow, dollarAmount) =>
         qtyUp50 = fib50 > 0 ? math.floor((dollarAmount * 0.30) / fib50) : 0
         qtyUp618 = fib618 > 0 ? math.floor((dollarAmount * 0.50) / fib618) : 0
         
-        // Combine hit signals (prioritize crossing down for return value)
-        hit382 = hitDown382 > 0 ? hitDown382 : (hitUp382 > 0 ? -1 : 0)  // -1 indicates crossing up
-        hit50 = hitDown50 > 0 ? hitDown50 : (hitUp50 > 0 ? -1 : 0)
-        hit618 = hitDown618 > 0 ? hitDown618 : (hitUp618 > 0 ? -1 : 0)
+        // Combine hit signals - only set if all conditions met
+        hit382 = allConditionsMet ? (hitDown382 > 0 ? hitDown382 : (hitUp382 > 0 ? -1 : 0)) : 0
+        hit50 = allConditionsMet ? (hitDown50 > 0 ? hitDown50 : (hitUp50 > 0 ? -1 : 0)) : 0
+        hit618 = allConditionsMet ? (hitDown618 > 0 ? hitDown618 : (hitUp618 > 0 ? -1 : 0)) : 0
         
         // Select appropriate quantity based on direction
         qty382 = hit382 == 1 ? qtyDown382 : (hit382 == -1 ? qtyUp382 : 0)
@@ -194,49 +269,88 @@ fibCheck(sym, swingHigh, swingLow, dollarAmount) =>
         [0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0]
 
 // ========== CHECK ALL STOCKS ==========
-[hitALAB382, hitALAB50, hitALAB618, fibALAB382, fibALAB50, fibALAB618, priceALAB, qtyALAB_382, qtyALAB_50, qtyALAB_618] = fibCheck(symALAB, swingHighALAB, swingLowALAB, dollarALAB)
-[hitAMD382, hitAMD50, hitAMD618, fibAMD382, fibAMD50, fibAMD618, priceAMD, qtyAMD_382, qtyAMD_50, qtyAMD_618] = fibCheck(symAMD, swingHighAMD, swingLowAMD, dollarAMD)
-[hitARM382, hitARM50, hitARM618, fibARM382, fibARM50, fibARM618, priceARM, qtyARM_382, qtyARM_50, qtyARM_618] = fibCheck(symARM, swingHighARM, swingLowARM, dollarARM)
-[hitASML382, hitASML50, hitASML618, fibASML382, fibASML50, fibASML618, priceASML, qtyASML_382, qtyASML_50, qtyASML_618] = fibCheck(symASML, swingHighASML, swingLowASML, dollarASML)
-[hitAVGO382, hitAVGO50, hitAVGO618, fibAVGO382, fibAVGO50, fibAVGO618, priceAVGO, qtyAVGO_382, qtyAVGO_50, qtyAVGO_618] = fibCheck(symAVGO, swingHighAVGO, swingLowAVGO, dollarAVGO)
-[hitGOOG382, hitGOOG50, hitGOOG618, fibGOOG382, fibGOOG50, fibGOOG618, priceGOOG, qtyGOOG_382, qtyGOOG_50, qtyGOOG_618] = fibCheck(symGOOG, swingHighGOOG, swingLowGOOG, dollarGOOG)
-[hitMRVL382, hitMRVL50, hitMRVL618, fibMRVL382, fibMRVL50, fibMRVL618, priceMRVL, qtyMRVL_382, qtyMRVL_50, qtyMRVL_618] = fibCheck(symMRVL, swingHighMRVL, swingLowMRVL, dollarMRVL)
-[hitMSTR382, hitMSTR50, hitMSTR618, fibMSTR382, fibMSTR50, fibMSTR618, priceMSTR, qtyMSTR_382, qtyMSTR_50, qtyMSTR_618] = fibCheck(symMSTR, swingHighMSTR, swingLowMSTR, dollarMSTR)
-[hitMU382, hitMU50, hitMU618, fibMU382, fibMU50, fibMU618, priceMU, qtyMU_382, qtyMU_50, qtyMU_618] = fibCheck(symMU, swingHighMU, swingLowMU, dollarMU)
-[hitNVDA382, hitNVDA50, hitNVDA618, fibNVDA382, fibNVDA50, fibNVDA618, priceNVDA, qtyNVDA_382, qtyNVDA_50, qtyNVDA_618] = fibCheck(symNVDA, swingHighNVDA, swingLowNVDA, dollarNVDA)
-[hitPLTR382, hitPLTR50, hitPLTR618, fibPLTR382, fibPLTR50, fibPLTR618, pricePLTR, qtyPLTR_382, qtyPLTR_50, qtyPLTR_618] = fibCheck(symPLTR, swingHighPLTR, swingLowPLTR, dollarPLTR)
-[hitTSLA382, hitTSLA50, hitTSLA618, fibTSLA382, fibTSLA50, fibTSLA618, priceTSLA, qtyTSLA_382, qtyTSLA_50, qtyTSLA_618] = fibCheck(symTSLA, swingHighTSLA, swingLowTSLA, dollarTSLA)
-[hitTSM382, hitTSM50, hitTSM618, fibTSM382, fibTSM50, fibTSM618, priceTSM, qtyTSM_382, qtyTSM_50, qtyTSM_618] = fibCheck(symTSM, swingHighTSM, swingLowTSM, dollarTSM)
+[hitALAB382, hitALAB50, hitALAB618, fibALAB382, fibALAB50, fibALAB618, priceALAB, qtyALAB_382, qtyALAB_50, qtyALAB_618] = fibCheck(swingHighALAB, swingLowALAB, dollarALAB)
+[hitAMD382, hitAMD50, hitAMD618, fibAMD382, fibAMD50, fibAMD618, priceAMD, qtyAMD_382, qtyAMD_50, qtyAMD_618] = fibCheck(swingHighAMD, swingLowAMD, dollarAMD)
+[hitARM382, hitARM50, hitARM618, fibARM382, fibARM50, fibARM618, priceARM, qtyARM_382, qtyARM_50, qtyARM_618] = fibCheck(swingHighARM, swingLowARM, dollarARM)
+[hitASML382, hitASML50, hitASML618, fibASML382, fibASML50, fibASML618, priceASML, qtyASML_382, qtyASML_50, qtyASML_618] = fibCheck(swingHighASML, swingLowASML, dollarASML)
+[hitAVGO382, hitAVGO50, hitAVGO618, fibAVGO382, fibAVGO50, fibAVGO618, priceAVGO, qtyAVGO_382, qtyAVGO_50, qtyAVGO_618] = fibCheck(swingHighAVGO, swingLowAVGO, dollarAVGO)
+[hitGOOG382, hitGOOG50, hitGOOG618, fibGOOG382, fibGOOG50, fibGOOG618, priceGOOG, qtyGOOG_382, qtyGOOG_50, qtyGOOG_618] = fibCheck(swingHighGOOG, swingLowGOOG, dollarGOOG)
+[hitMRVL382, hitMRVL50, hitMRVL618, fibMRVL382, fibMRVL50, fibMRVL618, priceMRVL, qtyMRVL_382, qtyMRVL_50, qtyMRVL_618] = fibCheck(swingHighMRVL, swingLowMRVL, dollarMRVL)
+[hitMSTR382, hitMSTR50, hitMSTR618, fibMSTR382, fibMSTR50, fibMSTR618, priceMSTR, qtyMSTR_382, qtyMSTR_50, qtyMSTR_618] = fibCheck(swingHighMSTR, swingLowMSTR, dollarMSTR)
+[hitMU382, hitMU50, hitMU618, fibMU382, fibMU50, fibMU618, priceMU, qtyMU_382, qtyMU_50, qtyMU_618] = fibCheck(swingHighMU, swingLowMU, dollarMU)
+[hitNVDA382, hitNVDA50, hitNVDA618, fibNVDA382, fibNVDA50, fibNVDA618, priceNVDA, qtyNVDA_382, qtyNVDA_50, qtyNVDA_618] = fibCheck(swingHighNVDA, swingLowNVDA, dollarNVDA)
+[hitPLTR382, hitPLTR50, hitPLTR618, fibPLTR382, fibPLTR50, fibPLTR618, pricePLTR, qtyPLTR_382, qtyPLTR_50, qtyPLTR_618] = fibCheck(swingHighPLTR, swingLowPLTR, dollarPLTR)
+[hitTSLA382, hitTSLA50, hitTSLA618, fibTSLA382, fibTSLA50, fibTSLA618, priceTSLA, qtyTSLA_382, qtyTSLA_50, qtyTSLA_618] = fibCheck(swingHighTSLA, swingLowTSLA, dollarTSLA)
+[hitTSM382, hitTSM50, hitTSM618, fibTSM382, fibTSM50, fibTSM618, priceTSM, qtyTSM_382, qtyTSM_50, qtyTSM_618] = fibCheck(swingHighTSM, swingLowTSM, dollarTSM)
 
-// ========== DEBUG: AUTO-CALCULATED VALUES ==========
-// These plots show the auto-calculated swing high/low values for each stock
-// Disabled by default - enable in Style tab if you want to see values in data window
-plot(autoHighALAB, title="ALAB Auto High", color=color.green, display=display.none)
-plot(autoLowALAB, title="ALAB Auto Low", color=color.red, display=display.none)
-plot(autoHighAMD, title="AMD Auto High", color=color.green, display=display.none)
-plot(autoLowAMD, title="AMD Auto Low", color=color.red, display=display.none)
-plot(autoHighARM, title="ARM Auto High", color=color.green, display=display.none)
-plot(autoLowARM, title="ARM Auto Low", color=color.red, display=display.none)
-plot(autoHighASML, title="ASML Auto High", color=color.green, display=display.none)
-plot(autoLowASML, title="ASML Auto Low", color=color.red, display=display.none)
-plot(autoHighAVGO, title="AVGO Auto High", color=color.green, display=display.none)
-plot(autoLowAVGO, title="AVGO Auto Low", color=color.red, display=display.none)
-plot(autoHighGOOG, title="GOOG Auto High", color=color.green, display=display.none)
-plot(autoLowGOOG, title="GOOG Auto Low", color=color.red, display=display.none)
-plot(autoHighMRVL, title="MRVL Auto High", color=color.green, display=display.none)
-plot(autoLowMRVL, title="MRVL Auto Low", color=color.red, display=display.none)
-plot(autoHighMSTR, title="MSTR Auto High", color=color.green, display=display.none)
-plot(autoLowMSTR, title="MSTR Auto Low", color=color.red, display=display.none)
-plot(autoHighMU, title="MU Auto High", color=color.green, display=display.none)
-plot(autoLowMU, title="MU Auto Low", color=color.red, display=display.none)
-plot(autoHighNVDA, title="NVDA Auto High", color=color.green, display=display.none)
-plot(autoLowNVDA, title="NVDA Auto Low", color=color.red, display=display.none)
-plot(autoHighPLTR, title="PLTR Auto High", color=color.green, display=display.none)
-plot(autoLowPLTR, title="PLTR Auto Low", color=color.red, display=display.none)
-plot(autoHighTSLA, title="TSLA Auto High", color=color.green, display=display.none)
-plot(autoLowTSLA, title="TSLA Auto Low", color=color.red, display=display.none)
-plot(autoHighTSM, title="TSM Auto High", color=color.green, display=display.none)
-plot(autoLowTSM, title="TSM Auto Low", color=color.red, display=display.none)
+// ========== FIBONACCI LEVELS FOR ALERTS (HIDDEN) ==========
+// These plots make Fibonacci levels available in the alert creation dialog
+// They are hidden from the chart display but accessible for creating custom alerts
+
+// ALAB Fibonacci Levels
+plot(fibALAB382, title="ALAB Fib 38.2%", color=color.new(color.yellow, 0), display=display.none)
+plot(fibALAB50, title="ALAB Fib 50.0%", color=color.new(color.orange, 0), display=display.none)
+plot(fibALAB618, title="ALAB Fib 61.8%", color=color.new(color.red, 0), display=display.none)
+
+// AMD Fibonacci Levels
+plot(fibAMD382, title="AMD Fib 38.2%", color=color.new(color.yellow, 0), display=display.none)
+plot(fibAMD50, title="AMD Fib 50.0%", color=color.new(color.orange, 0), display=display.none)
+plot(fibAMD618, title="AMD Fib 61.8%", color=color.new(color.red, 0), display=display.none)
+
+// ARM Fibonacci Levels
+plot(fibARM382, title="ARM Fib 38.2%", color=color.new(color.yellow, 0), display=display.none)
+plot(fibARM50, title="ARM Fib 50.0%", color=color.new(color.orange, 0), display=display.none)
+plot(fibARM618, title="ARM Fib 61.8%", color=color.new(color.red, 0), display=display.none)
+
+// ASML Fibonacci Levels
+plot(fibASML382, title="ASML Fib 38.2%", color=color.new(color.yellow, 0), display=display.none)
+plot(fibASML50, title="ASML Fib 50.0%", color=color.new(color.orange, 0), display=display.none)
+plot(fibASML618, title="ASML Fib 61.8%", color=color.new(color.red, 0), display=display.none)
+
+// AVGO Fibonacci Levels
+plot(fibAVGO382, title="AVGO Fib 38.2%", color=color.new(color.yellow, 0), display=display.none)
+plot(fibAVGO50, title="AVGO Fib 50.0%", color=color.new(color.orange, 0), display=display.none)
+plot(fibAVGO618, title="AVGO Fib 61.8%", color=color.new(color.red, 0), display=display.none)
+
+// GOOG Fibonacci Levels
+plot(fibGOOG382, title="GOOG Fib 38.2%", color=color.new(color.yellow, 0), display=display.none)
+plot(fibGOOG50, title="GOOG Fib 50.0%", color=color.new(color.orange, 0), display=display.none)
+plot(fibGOOG618, title="GOOG Fib 61.8%", color=color.new(color.red, 0), display=display.none)
+
+// MRVL Fibonacci Levels
+plot(fibMRVL382, title="MRVL Fib 38.2%", color=color.new(color.yellow, 0), display=display.none)
+plot(fibMRVL50, title="MRVL Fib 50.0%", color=color.new(color.orange, 0), display=display.none)
+plot(fibMRVL618, title="MRVL Fib 61.8%", color=color.new(color.red, 0), display=display.none)
+
+// MSTR Fibonacci Levels
+plot(fibMSTR382, title="MSTR Fib 38.2%", color=color.new(color.yellow, 0), display=display.none)
+plot(fibMSTR50, title="MSTR Fib 50.0%", color=color.new(color.orange, 0), display=display.none)
+plot(fibMSTR618, title="MSTR Fib 61.8%", color=color.new(color.red, 0), display=display.none)
+
+// MU Fibonacci Levels
+plot(fibMU382, title="MU Fib 38.2%", color=color.new(color.yellow, 0), display=display.none)
+plot(fibMU50, title="MU Fib 50.0%", color=color.new(color.orange, 0), display=display.none)
+plot(fibMU618, title="MU Fib 61.8%", color=color.new(color.red, 0), display=display.none)
+
+// NVDA Fibonacci Levels
+plot(fibNVDA382, title="NVDA Fib 38.2%", color=color.new(color.yellow, 0), display=display.none)
+plot(fibNVDA50, title="NVDA Fib 50.0%", color=color.new(color.orange, 0), display=display.none)
+plot(fibNVDA618, title="NVDA Fib 61.8%", color=color.new(color.red, 0), display=display.none)
+
+// PLTR Fibonacci Levels
+plot(fibPLTR382, title="PLTR Fib 38.2%", color=color.new(color.yellow, 0), display=display.none)
+plot(fibPLTR50, title="PLTR Fib 50.0%", color=color.new(color.orange, 0), display=display.none)
+plot(fibPLTR618, title="PLTR Fib 61.8%", color=color.new(color.red, 0), display=display.none)
+
+// TSLA Fibonacci Levels
+plot(fibTSLA382, title="TSLA Fib 38.2%", color=color.new(color.yellow, 0), display=display.none)
+plot(fibTSLA50, title="TSLA Fib 50.0%", color=color.new(color.orange, 0), display=display.none)
+plot(fibTSLA618, title="TSLA Fib 61.8%", color=color.new(color.red, 0), display=display.none)
+
+// TSM Fibonacci Levels
+plot(fibTSM382, title="TSM Fib 38.2%", color=color.new(color.yellow, 0), display=display.none)
+plot(fibTSM50, title="TSM Fib 50.0%", color=color.new(color.orange, 0), display=display.none)
+plot(fibTSM618, title="TSM Fib 61.8%", color=color.new(color.red, 0), display=display.none)
 
 // ========== TOTAL HITS COUNTER ==========
 totalHits = 0
